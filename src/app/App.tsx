@@ -52,7 +52,9 @@ export function App() {
   const bare = uiHidden || presentation || modelView; // canvas-only layouts
   useEffect(() => { if (toast) { const id = setTimeout(() => notify(null), 3500); return () => clearTimeout(id); } }, [toast, notify]);
   useEffect(() => { // Esc leaves model view / presentation
-    const f = (e: KeyboardEvent) => { if (e.key === 'Escape') { const s = useStore.getState(); if (s.modelView) s.setModelView(false); else if (s.presentation) s.setPresentation(false); } };
+    const f = (e: KeyboardEvent) => {
+      if ((e.key === 'h' || e.key === 'H') && !/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) { useStore.getState().goHome(); return; }
+      if (e.key === 'Escape') { const s = useStore.getState(); if (s.modelView) s.setModelView(false); else if (s.presentation) s.setPresentation(false); } };
     window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f);
   }, []);
   return (
@@ -70,7 +72,7 @@ export function App() {
               {!bare && !panels.left && <button className="absolute left-0 top-1/2 -translate-y-1/2 z-10 btn !rounded-l-none opacity-70 hover:opacity-100" title="Open objects & layers" onClick={() => togglePanel('left')}>▸ Objects</button>}
               {!bare && !panels.right && <button className="absolute right-0 top-1/2 -translate-y-1/2 z-10 btn !rounded-r-none opacity-70 hover:opacity-100" title="Open info & analysis tools" onClick={() => togglePanel('right')}>Info ◂</button>}
               {!bare && !panels.bottom && <button className="absolute left-1/2 -translate-x-1/2 bottom-0 z-10 btn !rounded-b-none opacity-70 hover:opacity-100" title="Open timeline view & charts" onClick={() => togglePanel('bottom')}>▴ Timeline & charts</button>}
-              {!bare && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}
+              {!bare && <div className="absolute right-2 top-2 flex gap-1 z-10"><button className="btn" title="Back to the start view over Thailand (H)" onClick={() => useStore.getState().goHome()}>⌂ Home</button>{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}
             </div>
             {!bare && mapMode !== '3d' && <>{mapMode === 'split' && <ResizeHandle dir="x" onDrag={(d) => setSize('map', sizes.map - d)} />}<div style={mapMode === 'split' ? { width: sizes.map } : undefined} className={`min-w-0 relative ${mapMode === '2d' ? 'flex-1' : 'shrink-0'}`}><Map2D />{mapMode === '2d' && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}</div></>}
           </div>

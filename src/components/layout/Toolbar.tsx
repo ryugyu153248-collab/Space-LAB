@@ -22,7 +22,7 @@ const Item = ({ onClick, children, disabled }: { onClick: () => void; children: 
   <button disabled={disabled} className="block w-full text-left px-3 py-1 hover:bg-slate-800 disabled:opacity-40" onClick={onClick}>{children}</button>
 );
 
-const CAMS: [CameraMode, string][] = [['earth', 'Earth overview (Thailand)'], ['thailand', 'Thailand close view'], ['leo', 'Low Earth orbit view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative satellite view (A→B)'], ['dual', 'Dual satellite comparison'], ['coverage', 'Global coverage view'], ['free', 'Free camera']];
+const CAMS: [CameraMode, string][] = [['thailand', 'Home — Thailand map'], ['earth', 'Whole Earth overview'], ['leo', 'Low Earth orbit view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative satellite view (A→B)'], ['dual', 'Dual satellite comparison'], ['coverage', 'Global coverage view'], ['free', 'Free camera']];
 const TABS: [AnyTab, string][] = [['info', 'Properties (right)'], ['maneuver', 'Maneuvers (right)'], ['conjunction', 'Conjunction & avoidance (right)'], ['events', 'Events (right)'], ['coverage', 'Coverage & targets (right)'], ['report', 'Reports & export (right)'], ['telemetry', 'Telemetry — simulated (right)'], ['orbit', 'Orbit charts (bottom)'], ['access', 'Ground station access (bottom)']];
 
 export function Toolbar() {
@@ -53,6 +53,7 @@ export function Toolbar() {
         {(['left', 'right', 'bottom'] as const).map((k) => <Item key={k} onClick={() => togglePanel(k)}>{panels[k] ? 'Hide' : 'Show'} {k} panel</Item>)}
         <Item onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.(); }}>Browser full screen</Item></>}</Menu>
       <div className="w-px h-5 bg-edge mx-2" />
+      <button className="btn btn-on" title="Return to the start view over Thailand (H)" onClick={() => s.goHome()}>⌂ Home</button>
       <select className="btn" value={cameraMode} onChange={(e) => setCameraMode(e.target.value as CameraMode)} title="Camera mode">{CAMS.map(([k, l]) => <option key={k} value={k} disabled={(k === 'follow' || k === 'closeup' || k === 'leo') && !selectedId}>{l}</option>)}</select>
       <button className="btn" title="Show / hide all side panels (simple ⇄ engineering layout)" onClick={() => { const any = panels.left || panels.right || panels.bottom; useStore.setState({ panels: { left: !any, right: !any, bottom: !any } }); }}>☰ Panels</button>
       <button className="btn btn-on" disabled={!selectedId} title="Full-screen view of the selected spacecraft model" onClick={() => setModelView(true)}>🛰 Model view</button>

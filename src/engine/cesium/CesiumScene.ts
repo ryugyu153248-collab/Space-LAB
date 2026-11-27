@@ -58,7 +58,7 @@ interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartes
 
 export type CameraMode = 'earth' | 'leo' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual' | 'coverage' | 'thailand';
 /** Default viewpoint: Thailand (Bangkok). */
-const THAI = { lon: 100.5, lat: 13.75, overview: 1.9e7, close: 2.2e6 };
+const THAI = { lon: 100.5, lat: 13.75, overview: 1.9e7, close: 1.8e6 };
 export interface CameraContext { stationId: string | null; secondId: string | null }
 export interface SavedView { name: string; position: [number, number, number]; direction: [number, number, number]; up: [number, number, number] }
 
@@ -173,8 +173,8 @@ export class CesiumScene {
     cc.inertiaSpin = 0.94; cc.inertiaTranslate = 0.94; cc.inertiaZoom = 0.88; cc.minimumZoomDistance = 2;
     scene.globe.depthTestAgainstTerrain = false;
     scene.postProcessStages.fxaa.enabled = true;
-    // start over Thailand, north up (full globe disc)
-    v.camera.setView({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, THAI.overview), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 } });
+    // home view: straight down over Thailand, north up (Thailand + neighbours with borders)
+    v.camera.setView({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, THAI.close), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 } });
 
     const pts = saaOutline();
     this.saa = v.entities.add({
@@ -473,6 +473,15 @@ export class CesiumScene {
         v.camera.flyTo({ destination: Cartesian3.fromRadians(g.lon, g.lat * 0.6, 2.6e7), duration: 2.5 });
       }
     } else this.camBlendStart = performance.now(); // per-frame modes: blend from the current pose
+  }
+
+  /** Home: fly back to the start view (straight down over Thailand, north up), releasing any camera tracking. */
+  goHome(duration = 1.6): void {
+    const v = this.viewer;
+    this.camMode = 'thailand';
+    v.trackedEntity = undefined;
+    v.camera.lookAtTransform(Matrix4.IDENTITY);
+    v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, THAI.close), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration });
   }
 
   saveView(name: string): SavedView {

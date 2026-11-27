@@ -11,6 +11,7 @@ import { DEFAULT_LAYERS, DEFAULT_SETTINGS, buildNapa2Demo } from '@/engine/data/
 import type { CoverageResult } from '@/engine/analysis/coverage';
 import type { CameraMode } from '@/engine/cesium/CesiumScene';
 import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from '@/engine/cesium/style';
+import { sceneRegistry } from '@/engine/cesium/registry';
 import type { ModelStyle } from '@/engine/cesium/models/templates';
 
 export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights' | 'terrain' | 'clouds' | 'sun' | 'moon' | 'stars' | 'eclipseShadow' | 'velocityVector' | 'graticule' | 'borders', boolean>;
@@ -87,6 +88,7 @@ interface State {
   setMapMode: (m: MapMode) => void;
   setStyle: (p: Partial<StyleSettings>) => void;
   setLook: (l: EarthLook) => void;
+  goHome: () => void;
   setModelStyle: (m: ModelStyle) => void;
   toggleHidden: (id: string) => void;
   setSize: (k: 'left' | 'right' | 'bottom' | 'map', v: number) => void;
@@ -130,8 +132,8 @@ export const useStore = create<State>((set, get) => ({
   scenarioId: demo.id, scenarioName: demo.name, baseSatellites: demo.satellites, events: demo.events,
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
-  layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.schematic } as Layers, clock: clock.snapshot(), cameraMode: 'earth', views: [],
-  panels: { left: false, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'schematic', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
+  layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.standard } as Layers, clock: clock.snapshot(), cameraMode: 'thailand', views: [],
+  panels: { left: false, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,
   presentation: false, uiHidden: false, toast: null,
 
@@ -191,10 +193,11 @@ export const useStore = create<State>((set, get) => ({
   setStyle: (p) => set((s) => ({ style: { ...s.style, ...p } })),
   setLook: (look) => set((s) => ({ look, layers: { ...s.layers, ...LOOK_PRESETS[look] } as Layers })),
   setModelStyle: (modelStyle) => set({ modelStyle }),
+  goHome: () => { set({ modelView: false, cameraMode: 'thailand' }); sceneRegistry.scene?.goHome(); },
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
   setRightTab: (rightTab) => set({ rightTab, panels: { ...get().panels, right: true } }),
   setSize: (k, v) => set((s) => ({ sizes: { ...s.sizes, [k]: Math.round(Math.min(k === 'bottom' ? 560 : 900, Math.max(k === 'bottom' ? 120 : 200, v))) } })),
-  setModelView: (modelView) => set((s) => ({ modelView, cameraMode: modelView ? 'closeup' : s.cameraMode === 'closeup' ? 'earth' : s.cameraMode })),
+  setModelView: (modelView) => set((s) => ({ modelView, cameraMode: modelView ? 'closeup' : s.cameraMode === 'closeup' ? 'thailand' : s.cameraMode })),
   setDialog: (dialog) => set({ dialog }),
   setEditingEvent: (editingEvent) => set({ editingEvent }),
   setSettings: (p) => set((s) => ({ settings: { ...s.settings, ...p } })),
@@ -217,7 +220,7 @@ export const useStore = create<State>((set, get) => ({
     set({
       scenarioId: f.id, scenarioName: f.name, baseSatellites: f.satellites, events: f.events, ...d, stations: f.stations,
       selectedId: f.satellites[0]?.id ?? null, secondId: f.satellites[1]?.id ?? null, selectedStationId: f.stations[0]?.id ?? null,
-      layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS[get().look], ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: get().modelView ? 'closeup' : 'earth',
+      layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS[get().look], ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: get().modelView ? 'closeup' : 'thailand',
       settings: { ...DEFAULT_SETTINGS, ...f.settings }, style: { ...DEFAULT_STYLE, ...(f.style ?? {}) }, heatmap: null, target: null,
       conjunctionPair: f.satellites.length > 1 ? [f.satellites[0].id, f.satellites[1].id] : null, dialog: null,
     });
