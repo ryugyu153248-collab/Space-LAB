@@ -50,15 +50,19 @@ interface Sat3D {
   surf: Cartesian3;
   foot?: Entity;
   footPts: Cartesian3[];
+  footT: number;
+  pathT: number;
+  alpha?: number;
   pools: { past: Cartesian3[]; fut: Cartesian3[]; gtp: Cartesian3[]; gtf: Cartesian3[]; ghost: Cartesian3[] };
   links: Map<string, { entity: Entity; arr: Cartesian3[] }>;
 }
 
-interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartesian3; coneRadius: { v: number } }
+interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartesian3; coneRadius: { v: number }; applied: number }
 
 export type CameraMode = 'earth' | 'leo' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual' | 'coverage' | 'thailand';
 /** Default viewpoint: Thailand (Bangkok). */
-const THAI = { lon: 100.5, lat: 13.75, overview: 1.9e7, close: 1.8e6 };
+/** Centre of Thailand's bounding box (97.3–105.6°E, 5.6–20.5°N); altitude chosen so the whole country fits with margin. */
+const THAI = { lon: 101.2, lat: 13.2, overview: 1.9e7, close: 4.0e6, northSouthKm: 2400 };
 export interface CameraContext { stationId: string | null; secondId: string | null }
 export interface SavedView { name: string; position: [number, number, number]; direction: [number, number, number]; up: [number, number, number] }
 
@@ -86,8 +90,16 @@ export class CesiumScene {
   private borders: PolylineCollection | null = null;
   private bordersLoading = false;
   private hires: ImageryLayer | null = null;
+
+  /** Camera altitude at which the view spans THAI.northSouthKm top-to-bottom, from the CURRENT frustum (so it adapts to the window shape). */
+  private homeAltitude(): number {
+    const fy = (this.viewer.camera.frustum as { fovy?: number }).fovy ?? CesiumMath.toRadians(33);
+    return (THAI.northSouthKm * 1000) / (2 * Math.tan(fy / 2));
+  }
   private lights: ImageryLayer | null = null;
   private cloudLayer: ImageryLayer | null = null;
+  private cloudLoading = false;
+  private schLoading = false;
   private terrain: TerrainProvider | null = null;
   private flat = new EllipsoidTerrainProvider();
   private style: StyleSettings = { ...DEFAULT_STYLE };
@@ -129,13 +141,6 @@ export class CesiumScene {
     const provider = token ? createWorldImageryAsync() : TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII'));
     this.baseLayer = ImageryLayer.fromProviderAsync(provider as Promise<never>);
     v.imageryLayers.add(this.baseLayer);
-    // 'schematic' look: technical blue globe derived from the bundled raster (offline), generated once
-    loadBackground().then((bg) => {
-      if (this.disposed) return;
-      this.schLayer = ImageryLayer.fromProviderAsync(SingleTileImageryProvider.fromUrl(schematicTexture(bg).toDataURL('image/png'), { rectangle: Rectangle.MAX_VALUE }));
-      v.imageryLayers.add(this.schLayer);
-      if (this.layers) this.setLayers(this.layers);
-    });
     if (!token) {
       // Sharp satellite imagery without any key: Esri World Imagery (zoom to street level) over the offline base, plus NASA GIBS city
       // lights on the night side. If the network blocks them, the offline NaturalEarthII base remains visible.
@@ -152,15 +157,6 @@ export class CesiumScene {
     // Terrain: Cesium World Terrain with an Ion token, otherwise keyless Terrarium (AWS) heightmaps; flat ellipsoid when switched off / unreachable.
     if (token) createWorldTerrainAsync().then((tp) => { this.terrain = tp; this.applyTerrain(); }).catch(() => { this.terrain = createTerrariumProvider(); this.applyTerrain(); });
     else { this.terrain = createTerrariumProvider(); this.applyTerrain(); }
-    // Procedural cloud layer (offline; generated once, lazily so the first frame is not delayed)
-    setTimeout(() => {
-      if (this.disposed) return;
-      const url = cloudCanvas(1024, 512).toDataURL('image/png');
-      this.cloudLayer = ImageryLayer.fromProviderAsync(SingleTileImageryProvider.fromUrl(url, { rectangle: Rectangle.MAX_VALUE }));
-      this.cloudLayer.alpha = this.style.cloudOpacity; this.cloudLayer.nightAlpha = 0.25;
-      v.imageryLayers.add(this.cloudLayer);
-      if (this.layers) this.setLayers(this.layers);
-    }, 50);
     scene.globe.enableLighting = true;
     scene.globe.showGroundAtmosphere = true;
     scene.globe.baseColor = Color.fromCssColorString('#0a1a2f');
@@ -168,13 +164,15 @@ export class CesiumScene {
     scene.fog.enabled = false;
     // smoothness: cap the render resolution on hi-DPI screens, gentle camera inertia, FXAA instead of heavy post-processing
     v.useBrowserRecommendedResolution = false;
-    v.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.5);
+    v.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.25);
     const cc = scene.screenSpaceCameraController;
     cc.inertiaSpin = 0.94; cc.inertiaTranslate = 0.94; cc.inertiaZoom = 0.88; cc.minimumZoomDistance = 2;
     scene.globe.depthTestAgainstTerrain = false;
     scene.postProcessStages.fxaa.enabled = true;
     // home view: straight down over Thailand, north up (Thailand + neighbours with borders)
     v.camera.setView({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, THAI.close), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 } });
+    // the canvas has no size yet at construction → re-frame once layout is known
+    setTimeout(() => { if (!this.disposed && this.camMode === 'thailand') this.goHome(0); }, 250);
 
     const pts = saaOutline();
     this.saa = v.entities.add({
@@ -244,7 +242,7 @@ export class CesiumScene {
       const have = this.sats.get(sat.id);
       if (!have) this.sats.set(sat.id, this.addSat(sat));
       else if (have.sat !== sat) {
-        have.sat = sat; have.cache = null;
+        have.sat = sat; have.cache = null; have.alpha = propsOf(sat).sensorHalfAngle;
         if (have.entity.label) have.entity.label.text = sat.name as never;
       }
     }
@@ -292,6 +290,8 @@ export class CesiumScene {
     if (this.cloudLayer) this.cloudLayer.show = l.clouds && !sch0;
     if (this.terrain) this.applyTerrain();
     const sch = this.look === 'schematic';
+    if (sch) this.ensureSchematic();
+    if (l.clouds && !sch) this.ensureClouds();
     if (this.baseLayer) this.baseLayer.show = !sch;
     if (this.schLayer) this.schLayer.show = sch;
     if (this.hires) this.hires.show = l.hiresImagery && !sch;
@@ -313,7 +313,9 @@ export class CesiumScene {
     const sc = this.viewer.scene, cin = look === 'cinematic';
     if (this.layers) this.setLayers(this.layers);
     sc.highDynamicRange = cin;
-    sc.globe.maximumScreenSpaceError = cin ? 1.2 : 2;
+    sc.globe.maximumScreenSpaceError = cin ? 1.5 : 2.5;
+    sc.globe.loadingDescendantLimit = 4;
+    sc.globe.preloadSiblings = false;
     sc.globe.dynamicAtmosphereLighting = true;
     sc.globe.dynamicAtmosphereLightingFromSun = cin;
     const bloom = sc.postProcessStages.bloom;
@@ -330,16 +332,49 @@ export class CesiumScene {
       if (this.disposed) return;
       const pc = new PolylineCollection();
       const mat = Material.fromType('Color', { color: Color.WHITE.withAlpha(0.9) });
-      for (const l of lines) pc.add({ positions: Cartesian3.fromDegreesArrayHeights(l.flatMap(([lo, la]) => [lo, la, 1500])), width: 1.3, material: mat });
       this.viewer.scene.primitives.add(pc);
       this.borders = pc;
       pc.show = this.layers?.borders ?? true;
+      // add ~40 lines per animation frame so building the collection never stalls a frame
+      let i = 0;
+      const step = () => {
+        if (this.disposed) return;
+        for (const end = Math.min(lines.length, i + 40); i < end; i++) pc.add({ positions: Cartesian3.fromDegreesArrayHeights(lines[i].flatMap(([lo, la]) => [lo, la, 1500])), width: 1.3, material: mat });
+        if (i < lines.length) requestAnimationFrame(step);
+      };
+      step();
     }).catch((e) => { console.error('borders failed', e); this.bordersLoading = false; });
   }
 
   /** Realistic vs colour-coded subsystem (cut-away) view for models that provide it. */
   setModelStyle(style: ModelStyle): void {
     for (const s of this.sats.values()) if (s.entity.model && s.kind) s.entity.model.uri = new ConstantProperty(modelUrl(s.kind, style).url) as never;
+  }
+
+  /** 'schematic' base texture: built on first use (≈100 ms of pixel work) so the default look starts without that hitch. */
+  private ensureSchematic(): void {
+    if (this.schLayer || this.schLoading) return;
+    this.schLoading = true;
+    loadBackground().then((bg) => {
+      if (this.disposed) return;
+      this.schLayer = ImageryLayer.fromProviderAsync(SingleTileImageryProvider.fromUrl(schematicTexture(bg).toDataURL('image/png'), { rectangle: Rectangle.MAX_VALUE }));
+      this.viewer.imageryLayers.add(this.schLayer);
+      if (this.layers) this.setLayers(this.layers);
+    });
+  }
+
+  /** Procedural clouds: generated on first use (heavy noise pass), one frame later so the UI stays responsive. */
+  private ensureClouds(): void {
+    if (this.cloudLayer || this.cloudLoading) return;
+    this.cloudLoading = true;
+    setTimeout(() => {
+      if (this.disposed) return;
+      const url = cloudCanvas(1024, 512).toDataURL('image/png');
+      this.cloudLayer = ImageryLayer.fromProviderAsync(SingleTileImageryProvider.fromUrl(url, { rectangle: Rectangle.MAX_VALUE }));
+      this.cloudLayer.alpha = this.style.cloudOpacity; this.cloudLayer.nightAlpha = 0.25;
+      this.viewer.imageryLayers.add(this.cloudLayer);
+      if (this.layers) this.setLayers(this.layers);
+    }, 30);
   }
 
   private applyTerrain(): void {
@@ -459,7 +494,7 @@ export class CesiumScene {
     if ((mode === 'follow' || mode === 'closeup') && this.selectedId && this.sats.has(this.selectedId)) v.trackedEntity = this.sats.get(this.selectedId)!.entity;
     else if (mode === 'earth' || mode === 'thailand') {
       // explicit heading/pitch/roll → always north-up (a plain flyTo would keep the previous, possibly rolled, orientation)
-      v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, mode === 'earth' ? THAI.overview : THAI.close), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration: 1.8 });
+      v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, mode === 'earth' ? THAI.overview : this.homeAltitude()), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration: 1.8 });
     }
     else if (mode === 'leo' || mode === 'coverage') {
       const sel = this.selectedId ? this.sats.get(this.selectedId) : undefined;
@@ -481,7 +516,7 @@ export class CesiumScene {
     this.camMode = 'thailand';
     v.trackedEntity = undefined;
     v.camera.lookAtTransform(Matrix4.IDENTITY);
-    v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, THAI.close), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration });
+    v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, this.homeAltitude()), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration });
   }
 
   saveView(name: string): SavedView {
@@ -561,9 +596,9 @@ export class CesiumScene {
     });
     const cone = this.viewer.entities.add({
       position: Cartesian3.fromRadians(g.lon, g.lat, 0),
-      ellipse: { semiMajorAxis: new CallbackProperty(() => coneRadius.v, false), semiMinorAxis: new CallbackProperty(() => coneRadius.v, false), material: color.withAlpha(0.12), outline: false, height: 0 },
+      ellipse: { semiMajorAxis: coneRadius.v, semiMinorAxis: coneRadius.v, material: color.withAlpha(0.12), outline: false, height: 0 },
     });
-    return { stn: g, entity, cone, ecef, coneRadius };
+    return { stn: g, entity, cone, ecef, coneRadius, applied: coneRadius.v };
   }
 
   private addSat(sat: Satellite): Sat3D {
@@ -586,12 +621,12 @@ export class CesiumScene {
       entity.orientation = new ConstantProperty(Quaternion.IDENTITY);
       entity.viewFrom = new ConstantProperty(new Cartesian3(0, -m.radius * 5, m.radius * 2.5)); // replaced per camera mode
     }
-    const s3: Sat3D = { sat, light, kind, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map(), cart: new Cartesian3(), surf: new Cartesian3(), footPts: [], pools: { past: [], fut: [], gtp: [], gtf: [], ghost: [] } };
+    const s3: Sat3D = { sat, light, kind, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map(), cart: new Cartesian3(), surf: new Cartesian3(), footPts: [], footT: 0, pathT: 0, alpha: propsOf(sat).sensorHalfAngle, pools: { past: [], fut: [], gtp: [], gtf: [], ghost: [] } };
     arrays.nadir = [s3.cart, s3.surf];
     if (light) return s3;
     if (propsOf(sat).sensorHalfAngle) {
       // sensor ground footprint for EVERY satellite that has a sensor (multi-satellite coverage view)
-      s3.foot = v.entities.add({ polygon: { hierarchy: new CallbackProperty(() => new PolygonHierarchy(s3.footPts), false), material: color.withAlpha(this.style.footprintOpacity), perPositionHeight: false, outline: false }, show: false });
+      s3.foot = v.entities.add({ polygon: { hierarchy: new PolygonHierarchy([]), material: color.withAlpha(this.style.footprintOpacity), perPositionHeight: false, outline: false }, show: false });
     }
     const line = (name: string, get: () => Cartesian3[], c: Color, width: number, dashed = false, glow = false) =>
       v.entities.add({ name, polyline: { positions: new CallbackProperty(get, false), width: glow ? width * 3 : width, arcType: 0 as never, material: glow ? new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c }) : dashed ? new PolylineDashMaterialProperty({ color: c, dashLength: 12 }) : new ColorMaterialProperty(c) } });
@@ -622,6 +657,7 @@ export class CesiumScene {
     v.clock.currentTime = JulianDate.fromDate(new Date(t));
     const th = gmst(t), c = Math.cos(th), sn = Math.sin(th);
     const states = new Map<string, { rE: Vec3; cart: Cartesian3 }>();
+    const now = performance.now();
     const sunEci = sunPositionEci(t);
     const hz = th / 2, qz: Quat = [Math.cos(hz), 0, 0, -Math.sin(hz)]; // ECI→ECEF rotation (−θ about z)
 
@@ -643,23 +679,31 @@ export class CesiumScene {
       const geo = ecefToGeodetic(rE);
       Cartesian3.fromRadians(geo.lon, geo.lat, 0, Ellipsoid.WGS84, s3.surf);
       s3.nadirPos!.setValue(s3.surf);
-      // footprint polygon of this satellite's sensor (attitude-aware)
-      const alpha = propsOf(s3.sat).sensorHalfAngle;
+      // footprint polygon of this satellite's sensor (attitude-aware). A polygon is re-triangulated whenever its hierarchy changes, so it is
+      // refreshed at 4 Hz with a constant hierarchy instead of every frame (≤ 2 km of lag at orbital speed, small against the footprint).
+      const alpha = s3.alpha;
       if (s3.foot) {
         const on = !!alpha && !!qb && (L?.footprints ?? true);
-        let ok = false;
-        if (on && qb) {
-          const bore = eciToEcef(quatRotate(qb, [0, 0, 1]), t);
+        if (!on) s3.foot.show = false;
+        else if (now - s3.footT > 250 || !s3.foot.show) {
+          s3.footT = now;
+          const bore = eciToEcef(quatRotate(qb!, [0, 0, 1]), t);
           const ring = sensorFootprint(rE, bore, alpha!, 40);
-          if (ring.every((p) => p)) { s3.footPts.length = 0; for (const p of ring as Vec3[]) s3.footPts.push(new Cartesian3(p[0], p[1], p[2])); ok = true; }
+          const ok = ring.every((p) => p);
+          if (ok) s3.foot.polygon!.hierarchy = new ConstantProperty(new PolygonHierarchy((ring as Vec3[]).map((p) => new Cartesian3(p[0], p[1], p[2])))) as never;
+          s3.foot.show = ok;
         }
-        s3.foot.show = ok;
       }
-      this.refreshPaths(s3, t, c, sn);
+      if (!s3.cache || now - s3.pathT > 100) { s3.pathT = now; this.refreshPaths(s3, t, c, sn); } // 10 Hz is plenty for static-looking orbit lines
       this.updateLinks(s3, cart, rE);
       if (s3.sat.id === this.selectedId) {
         const R = Math.hypot(...rE);
-        for (const g of this.stns.values()) g.coneRadius.v = R_EARTH * visibilityCentralAngle(R_EARTH, R, g.stn.minElevation);
+        for (const g of this.stns.values()) {
+          // a time-varying ellipse radius forces Cesium to rebuild the geometry every frame → only update on a >5 km change
+          const r = R_EARTH * visibilityCentralAngle(R_EARTH, R, g.stn.minElevation);
+          g.coneRadius.v = r;
+          if (Math.abs(r - g.applied) > 5000 && g.cone.ellipse) { g.applied = r; g.cone.ellipse.semiMajorAxis = new ConstantProperty(r) as never; g.cone.ellipse.semiMinorAxis = new ConstantProperty(r) as never; }
+        }
       }
     }
     // Earth umbra cone: axis = anti-Sun direction (ECEF), centred L/2 behind Earth's centre

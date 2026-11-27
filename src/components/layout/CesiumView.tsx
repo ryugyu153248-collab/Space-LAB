@@ -18,7 +18,7 @@ export function CesiumView() {
       // UI clock snapshot at ~10 Hz (rendering runs at display rate; simulation time is decoupled from it)
       onFrame: () => {
         const now = performance.now();
-        if (now - last > 100 && clock.snapshot().playing) { last = now; useStore.setState({ clock: clock.snapshot() }); }
+        if (now - last > 150 && clock.snapshot().playing) { last = now; useStore.setState({ clock: clock.snapshot() }); }
       },
     });
     scene.setOverlayProvider(() => {

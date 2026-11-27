@@ -109,9 +109,9 @@ interface State {
 
 /** Layer presets applied when the Earth look changes. */
 export const LOOK_PRESETS: Record<EarthLook, Partial<Layers>> = {
-  schematic: { borders: true, graticule: false, stars: false, sun: false, moon: false, cityLights: false, clouds: false, lighting: false, groundTracks: false, nadirLine: false, atmosphere: true },
-  standard: { borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: false, clouds: false, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
-  cinematic: { borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
+  schematic: { terrain: false, borders: true, graticule: false, stars: false, sun: false, moon: false, cityLights: false, clouds: false, lighting: false, groundTracks: false, nadirLine: false, atmosphere: true },
+  standard: { terrain: false, borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: false, clouds: false, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
+  cinematic: { terrain: true, borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
 };
 
 let savedPanels = { left: false, right: false, bottom: false };
