@@ -1,0 +1,36 @@
+{
+  "name": "space-lab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "copy-cesium": "node scripts/copy-cesium.mjs",
+    "predev": "npm run copy-cesium",
+    "dev": "vite",
+    "prebuild": "npm run copy-cesium",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "cesium": "^1.147.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.11.1",
+    "satellite.js": "^6.0.2",
+    "zod": "^4.6.7",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "autoprefixer": "^10.7.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0",
+    "vitest": "^5.1.2"
+  }
+}
