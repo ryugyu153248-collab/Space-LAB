@@ -16,13 +16,14 @@ import { gmst } from '../orbital/time';
 import { pointFromState, stepForPeriod, type EphemerisPoint } from '../orbital/ephemeris';
 import { burnDirection } from '../orbital/maneuvers';
 import { attitudeAt, quatRotate, sensorFootprint, targetQuat, type AttitudeContext, type Quat } from '../orbital/attitude';
-import { modelKindFor, modelUrl, type ModelKind } from './models/templates';
+import { modelKindFor, modelUrl, type ModelKind, type ModelStyle } from './models/templates';
 import { sunPositionEci } from '../orbital/sun';
 import { saaOutline } from '../orbital/environment';
 import type { SimEvent } from '../events/EventTypes';
 import { createTerrariumProvider } from './terrain';
 import { cloudCanvas } from './clouds';
 import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from './style';
+import { graticuleLines, loadBackground, schematicTexture } from './baseMap';
 
 /**
  * Visualization only. All positions come from the Orbital Engine (propagateSatellite); Cesium never computes physics.
@@ -76,6 +77,9 @@ export class CesiumScene {
   private handler: ScreenSpaceEventHandler;
   private disposed = false;
   private hidden = new Set<string>();
+  private baseLayer: ImageryLayer | null = null;
+  private schLayer: ImageryLayer | null = null;
+  private graticule: Entity[] = [];
   private hires: ImageryLayer | null = null;
   private lights: ImageryLayer | null = null;
   private cloudLayer: ImageryLayer | null = null;
@@ -118,7 +122,15 @@ export class CesiumScene {
     v.clock.shouldAnimate = false;
     v.clock.currentTime = JulianDate.fromDate(new Date(clock.time));
     const provider = token ? createWorldImageryAsync() : TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII'));
-    v.imageryLayers.add(ImageryLayer.fromProviderAsync(provider as Promise<never>));
+    this.baseLayer = ImageryLayer.fromProviderAsync(provider as Promise<never>);
+    v.imageryLayers.add(this.baseLayer);
+    // 'schematic' look: technical blue globe derived from the bundled raster (offline), generated once
+    loadBackground().then((bg) => {
+      if (this.disposed) return;
+      this.schLayer = ImageryLayer.fromProviderAsync(SingleTileImageryProvider.fromUrl(schematicTexture(bg).toDataURL('image/png'), { rectangle: Rectangle.MAX_VALUE }));
+      v.imageryLayers.add(this.schLayer);
+      if (this.layers) this.setLayers(this.layers);
+    });
     if (!token) {
       // Sharp satellite imagery without any key: Esri World Imagery (zoom to street level) over the offline base, plus NASA GIBS city
       // lights on the night side. If the network blocks them, the offline NaturalEarthII base remains visible.
@@ -165,6 +177,9 @@ export class CesiumScene {
       show: false,
     });
 
+    this.graticule = graticuleLines(15, 3).map((l) => v.entities.add({
+      polyline: { positions: Cartesian3.fromDegreesArrayHeights(l.flatMap((p) => [p.lon, p.lat, 2500])), width: 1, arcType: 0 as never, material: Color.WHITE.withAlpha(0.5) }, show: false,
+    }));
     const line = (c: Color, w: number, get: () => Cartesian3[], dash = false) => v.entities.add({
       polyline: { positions: new CallbackProperty(get, false), width: w, arcType: 0 as never, material: dash ? new PolylineDashMaterialProperty({ color: c }) : new ColorMaterialProperty(c) }, show: false,
     });
@@ -266,11 +281,17 @@ export class CesiumScene {
     if (scene.sun) scene.sun.show = l.sun;
     if (scene.moon) scene.moon.show = l.moon;
     if (scene.skyBox) scene.skyBox.show = l.stars;
+    const sch0 = this.look === 'schematic';
     this.shadow.show = l.eclipseShadow;
-    if (this.cloudLayer) this.cloudLayer.show = l.clouds;
+    if (this.cloudLayer) this.cloudLayer.show = l.clouds && !sch0;
     if (this.terrain) this.applyTerrain();
-    if (this.hires) this.hires.show = l.hiresImagery;
-    if (this.lights) this.lights.show = l.cityLights;
+    const sch = this.look === 'schematic';
+    if (this.baseLayer) this.baseLayer.show = !sch;
+    if (this.schLayer) this.schLayer.show = sch;
+    if (this.hires) this.hires.show = l.hiresImagery && !sch;
+    if (this.lights) this.lights.show = l.cityLights && !sch;
+    for (const e of this.graticule) e.show = l.graticule;
+    scene.backgroundColor = sch ? Color.fromCssColorString('#16171b') : Color.BLACK;
     if (this.heatLayer) { this.heatLayer.show = l.coverage; this.heatLayer.alpha = this.style.heatmapOpacity; }
     for (const x of this.effects) x.entity.show = l.eventEffects;
   }
@@ -282,6 +303,7 @@ export class CesiumScene {
   setLook(look: EarthLook): void {
     this.look = look;
     const sc = this.viewer.scene, cin = look === 'cinematic';
+    if (this.layers) this.setLayers(this.layers);
     sc.highDynamicRange = cin;
     sc.globe.maximumScreenSpaceError = cin ? 1.2 : 2;
     sc.globe.dynamicAtmosphereLighting = true;
@@ -291,6 +313,11 @@ export class CesiumScene {
     if (cin) { bloom.uniforms.brightness = -0.35; bloom.uniforms.contrast = 110; bloom.uniforms.glowOnly = false; }
     if (sc.skyAtmosphere) sc.skyAtmosphere.perFragmentAtmosphere = cin;
     this.setStyle(this.style);
+  }
+
+  /** Realistic vs colour-coded subsystem (cut-away) view for models that provide it. */
+  setModelStyle(style: ModelStyle): void {
+    for (const s of this.sats.values()) if (s.entity.model && s.kind) s.entity.model.uri = new ConstantProperty(modelUrl(s.kind, style).url) as never;
   }
 
   private applyTerrain(): void {
@@ -318,6 +345,16 @@ export class CesiumScene {
     if (s.light) return;
     const st = this.style, c = Color.fromCssColorString(s.sat.color), e = s.entities;
     const set = (en: Entity | undefined, width: number, mat: unknown) => { if (en?.polyline) { en.polyline.width = width as never; en.polyline.material = mat as never; } };
+    if (this.look === 'schematic') {
+      // thin light-grey orbit rings tinted by the satellite colour (technical-diagram style)
+      const g = Color.lerp(Color.fromCssColorString('#d8dee9'), c, 0.35, new Color());
+      set(e.orbitPast, 1, new ColorMaterialProperty(g.withAlpha(0.3)));
+      set(e.orbitFuture, Math.max(1, st.orbitWidth * 0.6), new ColorMaterialProperty(g.withAlpha(0.85)));
+      set(e.gtPast, st.trackWidth * 0.6, new ColorMaterialProperty(Color.WHITE.withAlpha(st.trackOpacity * 0.4)));
+      set(e.gtFuture, st.trackWidth, new PolylineDashMaterialProperty({ color: Color.fromCssColorString(st.trackColor).withAlpha(st.trackOpacity), dashLength: 12 }));
+      if (s.foot?.polygon) s.foot.polygon.material = new ColorMaterialProperty(c.withAlpha(st.footprintOpacity)) as never;
+      return;
+    }
     set(e.orbitPast, st.orbitWidth * 0.75, new ColorMaterialProperty(c.withAlpha(st.orbitOpacity * 0.37)));
     set(e.orbitFuture, this.look === 'cinematic' ? st.orbitWidth * 3 : st.orbitWidth, this.look === 'cinematic' ? new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c.withAlpha(st.orbitOpacity) }) : new ColorMaterialProperty(c.withAlpha(st.orbitOpacity)));
     set(e.gtPast, st.trackWidth * 0.75, new ColorMaterialProperty(Color.WHITE.withAlpha(st.trackOpacity * 0.4)));

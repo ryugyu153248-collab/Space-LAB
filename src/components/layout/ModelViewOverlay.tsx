@@ -1,7 +1,7 @@
 import { useStore } from '@/stores/store';
 import { clock } from '@/engine/simulation/runtime';
 import { TIME_RATES } from '@/engine/simulation/SimulationClock';
-import { MODEL_LABEL, modelKindFor } from '@/engine/cesium/models/templates';
+import { MODEL_LABEL, SUBSYSTEMS, hasSubsystemView, modelKindFor } from '@/engine/cesium/models/templates';
 import { formatUtc } from '@/engine/orbital/time';
 import { propagateSatellite } from '@/engine/orbital/propagate';
 import { ecefToGeodetic, eciToEcef } from '@/engine/orbital/frames';
@@ -9,7 +9,7 @@ import { norm } from '@/engine/orbital/vec';
 
 /** Full-screen "model view": the 3D canvas fills the window, the selected spacecraft is framed close-up. */
 export function ModelViewOverlay() {
-  const { satellites, selectedId, select, setModelView } = useStore();
+  const { satellites, selectedId, select, setModelView, modelStyle, setModelStyle } = useStore();
   const c = useStore((s) => s.clock);
   const list = satellites.filter((s) => s.kind !== 'debris');
   const sat = list.find((s) => s.id === selectedId) ?? list[0];
@@ -17,6 +17,7 @@ export function ModelViewOverlay() {
   const idx = list.indexOf(sat);
   const st = propagateSatellite(sat, c.time);
   const g = st ? ecefToGeodetic(eciToEcef(st.r, c.time)) : null;
+  const kind = modelKindFor(sat), sub = hasSubsystemView(kind), showSub = sub && modelStyle === 'subsystems';
   const step = (d: number) => select(list[(idx + d + list.length) % list.length].id);
   return (
     <>
@@ -30,6 +31,12 @@ export function ModelViewOverlay() {
         <div className="text-[10px] text-slate-500 mt-2 flex gap-3"><span><b className="text-red-400">━</b> X along-track</span><span><b className="text-green-400">━</b> Y array axis</span><span><b className="text-blue-400">━</b> Z nadir</span></div>
         <div className="text-[10px] text-slate-600 mt-1">Drag = rotate · wheel = zoom · right-drag = pan</div>
       </div>
+      {sub && (
+        <div className="absolute right-4 top-14 bg-panel/75 backdrop-blur border border-edge rounded-lg px-3 py-2 pointer-events-auto text-[11px] space-y-1.5">
+          <div className="flex gap-1">{(['realistic', 'subsystems'] as const).map((m) => <button key={m} className={`btn ${modelStyle === m ? 'btn-on' : ''}`} onClick={() => setModelStyle(m)}>{m === 'realistic' ? 'Realistic' : 'Subsystems'}</button>)}</div>
+          {showSub && <div className="space-y-1">{SUBSYSTEMS.map((x) => <div key={x.id} className="flex items-center gap-2 text-slate-200"><span className="w-3 h-3 rounded-sm" style={{ background: x.color }} />{x.label}</div>)}<div className="text-[10px] text-slate-500 pt-1">Illustrative layout from public descriptions</div></div>}
+        </div>
+      )}
       <button className="btn absolute right-4 top-4 pointer-events-auto" onClick={() => setModelView(false)}>⊞ Open workspace (Esc)</button>
       <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex items-center gap-2 bg-panel/75 backdrop-blur border border-edge rounded-lg px-3 py-2 pointer-events-auto">
         <button className="btn" onClick={() => step(-1)} disabled={list.length < 2}>◀ Prev</button>

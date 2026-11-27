@@ -22,7 +22,7 @@ function Section({ title, count, children, open = true, action }: { title: strin
 }
 
 const GROUPS: [string, [keyof Layers, string][]][] = [
-  ['Earth', [['hiresImagery', 'Earth surface — Esri World Imagery (online)'], ['terrain', 'Terrain (Cesium World Terrain / AWS Terrarium)'], ['atmosphere', 'Atmosphere & limb glow'], ['clouds', 'Clouds (procedural)'], ['cityLights', 'Night lights (NASA VIIRS, online)'], ['lighting', 'Day/night lighting & terminator']]],
+  ['Earth', [['graticule', 'Lat/lon grid (graticule)'], ['hiresImagery', 'Earth surface — Esri World Imagery (online)'], ['terrain', 'Terrain (Cesium World Terrain / AWS Terrarium)'], ['atmosphere', 'Atmosphere & limb glow'], ['clouds', 'Clouds (procedural)'], ['cityLights', 'Night lights (NASA VIIRS, online)'], ['lighting', 'Day/night lighting & terminator']]],
   ['Space', [['sun', 'Sun'], ['moon', 'Moon'], ['stars', 'Stars'], ['eclipseShadow', 'Earth shadow (umbra cone)']]],
   ['Spacecraft', [['satellites', 'Satellites'], ['models', '3D spacecraft models'], ['labels', 'Labels'], ['debris', 'Debris objects'], ['bodyAxes', 'Body axes / Sun vector (near view)'], ['velocityVector', 'Velocity vector']]],
   ['Orbits & tracks', [['orbits', 'Orbit paths (past / future / pre-maneuver)'], ['groundTracks', 'Ground tracks'], ['nadirLine', 'Sub-satellite point / nadir']]],
@@ -47,7 +47,7 @@ function LookSwitch() {
   return (
     <div className="px-3 pb-2 flex items-center gap-1">
       <span className="text-slate-400 mr-1">Earth look</span>
-      {(['standard', 'cinematic'] as const).map((k) => <button key={k} title={k === 'standard' ? 'Plain, smooth: no glow, bloom, city lights or clouds' : 'HDR, bloom, glow, city lights and clouds'} className={`btn ${look === k ? 'btn-on' : ''}`} onClick={() => set(k)}>{k === 'standard' ? 'Standard' : 'Cinematic'}</button>)}
+      {(['schematic', 'standard', 'cinematic'] as const).map((k) => <button key={k} title={k === 'schematic' ? 'Technical blue globe with lat/lon grid and thin orbit rings' : k === 'standard' ? 'Plain imagery globe: no glow, bloom, city lights or clouds' : 'HDR, bloom, glow, city lights and clouds'} className={`btn capitalize ${look === k ? 'btn-on' : ''}`} onClick={() => set(k)}>{k}</button>)}
     </div>
   );
 }

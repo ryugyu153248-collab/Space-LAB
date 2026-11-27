@@ -101,3 +101,13 @@ describe('access (AOS/LOS)', () => {
     expect(nextContact(res, res.windowEnd + 1)).toBeNull();
   });
 });
+
+describe('NAPA-2 demo scenario', () => {
+  it('assumed SSO orbit gives several Bangkok passes per day with a 10° mask', async () => {
+    const { buildNapa2Demo } = await import('../data/demoFile');
+    const f = buildNapa2Demo();
+    const r = computeAccess(f.satellites[0], f.stations[0], f.clock.start, f.clock.end);
+    expect(r.passes.length).toBeGreaterThanOrEqual(2);
+    expect(f.satellites[0].origin).toBe('SIMULATED');
+  });
+});

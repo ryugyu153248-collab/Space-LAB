@@ -12,6 +12,7 @@ export interface Preset { label: string; query: CelestrakQuery; limit?: number; 
 
 export const PRESETS: Preset[] = [
   { label: 'ISS (ZARYA)', query: { catnr: '25544' } },
+  { label: 'NAPA-2', query: { name: 'NAPA' }, limit: 3, note: 'Thai CubeSat — searched by name' },
   { label: 'Hubble (HST)', query: { catnr: '20580' } },
   { label: 'Tiangong (CSS)', query: { catnr: '48274' } },
   { label: 'Space stations', query: { group: 'stations' }, limit: 12 },

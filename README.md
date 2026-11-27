@@ -2,6 +2,7 @@
 
 Web-based space-mission simulation & analysis platform (STK-inspired): CesiumJS 3D globe + an in-browser orbital-mechanics,
 events, SSA, coverage and reporting engine. React · TypeScript · Vite · Tailwind · Zustand · Recharts · Zod · satellite.js.
+Looks: Schematic (default: technical blue globe + lat/lon grid + thin orbit rings), Standard, Cinematic. Default scenario: NAPA-2-style 6U CubeSat over Bangkok (assumed orbit).
 Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Run / test / build

@@ -7,9 +7,10 @@ import { propagateSatellite } from '../../orbital/propagate';
  * Procedural spacecraft models (primitive geometry — no downloaded assets). Shapes follow the real vehicles' overall layout
  * and approximate proportions (metres) but are SIMPLIFIED illustrations, not CAD. Body frame: +Z nadir/sensor, +Y array axis, +X along-track.
  */
-export type ModelKind = 'iss' | 'tiangong' | 'hubble' | 'starlink' | 'gps' | 'geocomsat' | 'weather' | 'cubesat' | 'generic';
+export type ModelKind = 'napa2' | 'iss' | 'tiangong' | 'hubble' | 'starlink' | 'gps' | 'geocomsat' | 'weather' | 'cubesat' | 'generic';
 
 export const MODEL_LABEL: Record<ModelKind, string> = {
+  napa2: 'NAPA-2-like 6U CubeSat (Thai, illustrative)',
   iss: 'ISS-like modular station', tiangong: 'Tiangong-like T-shape station', hubble: 'Hubble-like space telescope', starlink: 'Starlink-like flat-panel',
   gps: 'GNSS (GPS-like) satellite', geocomsat: 'GEO communications satellite', weather: 'Weather / Earth-observation satellite', cubesat: 'CubeSat', generic: 'Generic LEO satellite bus',
 };
@@ -41,7 +42,50 @@ const generic = (b: ModelBuilder) => {
   b.box('dark', M.dark, [0.6, 0.5, -1.7], [0.3, 0.3, 0.3]);               // star tracker
 };
 
+/** Subsystem colour code (matches the legend of the NAPA-2 command-simulator concept). */
+export const SUBSYSTEMS = [
+  { id: 'imager', label: 'Imager (camera)', color: '#f59e0b' },
+  { id: 'adcs', label: 'ADCS', color: '#8b83e6' },
+  { id: 'obc', label: 'OBC', color: '#22a35a' },
+  { id: 'eps', label: 'EPS / battery', color: '#3b82f6' },
+  { id: 'trxvu', label: 'TRXVU (VHF/UHF)', color: '#14a38b' },
+  { id: 'thruster', label: 'Thruster (iodine)', color: '#ef5b3c' },
+] as const;
+const hex = (h: string, a = 1): Material => {
+  const c = [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+  // matte + a little self-illumination so the colour code stays saturated under strong sunlight
+  return { color: [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8, a], metallic: 0, roughness: 0.9, emissive: [c[0] * 0.3, c[1] * 0.3, c[2] * 0.3] };
+};
+export const hasSubsystemView = (k: ModelKind): boolean => k === 'napa2';
+
+/**
+ * 6U CubeSat (≈10 × 20 × 30 cm, ratio 1 : 2 : 3), long axis along body Z with the imager at the +Z (nadir) end and the thruster at −Z.
+ * Realistic view: body-mounted solar cells, aluminium end plates, lens, antennas. Subsystem view: translucent shell + colour-coded internals.
+ * Sizes are scaled ×10 for visibility next to the globe (real size is 0.1 × 0.2 × 0.3 m); layout is ILLUSTRATIVE (from public descriptions), not CAD.
+ */
+export function buildNapa2(b: ModelBuilder, style: 'realistic' | 'subsystems'): void {
+  const X = 1.0, Y = 2.0, Z = 3.0;
+  if (style === 'realistic') {
+    b.box('shell', M.dark, [0, 0, 0], [X, Y, Z]);
+    b.box('cell', M.cell, [X / 2 + 0.01, 0, 0], [0.02, Y * 0.92, Z * 0.94]); b.box('cell', M.cell, [-X / 2 - 0.01, 0, 0], [0.02, Y * 0.92, Z * 0.94]);
+    b.box('cell', M.cell, [0, Y / 2 + 0.01, 0], [X * 0.92, 0.02, Z * 0.94]); b.box('cell', M.cell, [0, -Y / 2 - 0.01, 0], [X * 0.92, 0.02, Z * 0.94]);
+    b.box('silver', M.silver, [0, 0, Z / 2 + 0.03], [X, Y, 0.06]); b.box('silver', M.silver, [0, 0, -Z / 2 - 0.03], [X, Y, 0.06]);
+    b.cylinder('dark', M.dark, [0, 0, Z / 2 + 0.2], 2, 0.28, 0.38, 0.4, 24); b.cylinder('lens', M.lens, [0, 0, Z / 2 + 0.35], 2, 0.03, 0.34, 0.34, 24); // imager barrel + lens
+    b.cylinder('silver', M.silver, [0, 0, -Z / 2 - 0.15], 2, 0.2, 0.12, 0.2, 18);                                                              // thruster nozzle
+    b.cylinder('frame', M.frame, [0.6, 0.9, -Z / 2 + 0.1], 2, 1.4, 0.015, 0.015, 6); b.cylinder('frame', M.frame, [-0.6, -0.9, -Z / 2 + 0.1], 0, 1.4, 0.015, 0.015, 6); // UHF / VHF antennas
+    return;
+  }
+  const S = (id: string): Material => hex(SUBSYSTEMS.find((x) => x.id === id)!.color);
+  b.box('xray', { color: [0.75, 0.8, 0.9, 0.16], metallic: 0, roughness: 0.2 }, [0, 0, 0], [X, Y, Z]);                // translucent shell
+  const slot = (id: string, z: number, len: number, w = 0.8, h = 1.7) => b.box(id, S(id), [0, 0, z], [w, h, len]);
+  b.cylinder('imager', S('imager'), [0, 0, 1.15], 2, 0.5, 0.36, 0.4, 24);       // imager (nadir end)
+  slot('adcs', 0.62, 0.34); slot('obc', 0.2, 0.3); slot('eps', -0.25, 0.45, 0.85, 1.75); slot('trxvu', -0.72, 0.3);
+  b.cylinder('thruster', S('thruster'), [0, 0, -1.2], 2, 0.4, 0.16, 0.3, 18);   // thruster (zenith end)
+  b.cylinder('trxvu', S('trxvu'), [0.62, 0.95, -1.2], 2, 1.0, 0.02, 0.02, 6); b.cylinder('trxvu', S('trxvu'), [-0.62, -0.95, -1.2], 2, 1.0, 0.02, 0.02, 6);
+}
+
 const BUILD: Record<ModelKind, (b: ModelBuilder) => void> = {
+  napa2: (b) => buildNapa2(b, 'realistic'),
   generic,
   cubesat: (b) => {
     b.box('gold', M.gold, [0, 0, 0], [1, 1, 3]);                          // 3U (shown larger than real 0.1×0.1×0.34 m)
@@ -112,6 +156,7 @@ const BUILD: Record<ModelKind, (b: ModelBuilder) => void> = {
 export function modelKindFor(sat: Satellite): ModelKind {
   const n = `${sat.name} ${sat.noradId ?? ''}`.toUpperCase();
   const id = sat.noradId ?? '';
+  if (/NAPA/.test(n)) return 'napa2';
   if (id === '25544' || /\bISS\b|ZARYA/.test(n)) return 'iss';
   if (/TIANHE|CSS\b|TIANGONG|\b48274\b/.test(n)) return 'tiangong';
   if (id === '20580' || /HST|HUBBLE/.test(n)) return 'hubble';
@@ -129,19 +174,22 @@ export function modelKindFor(sat: Satellite): ModelKind {
   return 'generic';
 }
 
-const cache = new Map<ModelKind, { url: string; radius: number }>();
+const cache = new Map<string, { url: string; radius: number }>();
+export type ModelStyle = 'realistic' | 'subsystems';
 
 /** Blob URL (cached) of the GLB for a kind plus its bounding radius in metres. */
-export function modelUrl(kind: ModelKind): { url: string; radius: number } {
-  const hit = cache.get(kind);
+export function modelUrl(kind: ModelKind, style: ModelStyle = 'realistic'): { url: string; radius: number } {
+  const st: ModelStyle = hasSubsystemView(kind) ? style : 'realistic';
+  const key = `${kind}|${st}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   const b = new ModelBuilder();
-  BUILD[kind](b);
+  if (kind === 'napa2') buildNapa2(b, st); else BUILD[kind](b);
   const glb = b.build();
   const out = { url: URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' })), radius: b.radius };
-  cache.set(kind, out);
+  cache.set(key, out);
   return out;
 }
 
-export function buildModelGlb(kind: ModelKind): ArrayBuffer { const b = new ModelBuilder(); BUILD[kind](b); return b.build(); }
+export function buildModelGlb(kind: ModelKind, style: ModelStyle = 'realistic'): ArrayBuffer { const b = new ModelBuilder(); if (kind === 'napa2') buildNapa2(b, style); else BUILD[kind](b); return b.build(); }
 export const MODEL_KINDS = Object.keys(BUILD) as ModelKind[];

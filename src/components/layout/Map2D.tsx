@@ -10,6 +10,7 @@ import { saaOutline } from '@/engine/orbital/environment';
 import { sensorFootprint } from '@/engine/orbital/attitude';
 import { DEG, R_EARTH } from '@/engine/orbital/constants';
 import { norm } from '@/engine/orbital/vec';
+import { loadBackground } from '@/engine/cesium/baseMap';
 import type { Satellite, Vec3 } from '@/types';
 
 /**
@@ -18,26 +19,6 @@ import type { Satellite, Vec3 } from '@/types';
  * Everything is drawn from the same propagated states as the 3-D view. Wheel = zoom, drag = pan, double-click = reset, click = set target.
  */
 interface Track { key: string; tRef: number; period: number; pts: { t: number; lat: number; lon: number }[] }
-
-const BASE = (typeof CESIUM_BASE_URL === 'string' ? CESIUM_BASE_URL : '/cesium') as string;
-declare const CESIUM_BASE_URL: string;
-
-let bgPromise: Promise<HTMLCanvasElement> | null = null;
-/** NaturalEarthII level-2 tiles (8×4 TMS, 256 px) stitched into a 2048×1024 equirectangular image. Bundled with Cesium → offline. */
-function loadBackground(): Promise<HTMLCanvasElement> {
-  return (bgPromise ??= new Promise((resolve) => {
-    const cv = document.createElement('canvas'); cv.width = 2048; cv.height = 1024;
-    const ctx = cv.getContext('2d')!;
-    ctx.fillStyle = '#0a1a2f'; ctx.fillRect(0, 0, 2048, 1024);
-    let left = 32;
-    for (let x = 0; x < 8; x++) for (let y = 0; y < 4; y++) {
-      const img = new Image();
-      img.onload = () => { ctx.drawImage(img, x * 256, (3 - y) * 256); if (--left === 0) resolve(cv); };
-      img.onerror = () => { if (--left === 0) resolve(cv); };
-      img.src = `${BASE}/Assets/Textures/NaturalEarthII/2/${x}/${y}.jpg`;
-    }
-  }));
-}
 
 const wrapLon = (l: number) => ((l + 540) % 360) - 180;
 

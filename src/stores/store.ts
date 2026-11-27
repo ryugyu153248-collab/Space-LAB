@@ -7,12 +7,13 @@ import { nextColor, satelliteFromTle, type ParsedTle } from '@/engine/data/tle';
 import { deriveScenario, newEvent } from '@/engine/events/EventManager';
 import type { EventStatus, EventType, SimEvent } from '@/engine/events/EventTypes';
 import { SCHEMA_VERSION, type CameraView, type ScenarioFile } from '@/engine/data/scenario';
-import { DEFAULT_LAYERS, DEFAULT_SETTINGS, buildCollisionDemo } from '@/engine/data/demoFile';
+import { DEFAULT_LAYERS, DEFAULT_SETTINGS, buildNapa2Demo } from '@/engine/data/demoFile';
 import type { CoverageResult } from '@/engine/analysis/coverage';
 import type { CameraMode } from '@/engine/cesium/CesiumScene';
 import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from '@/engine/cesium/style';
+import type { ModelStyle } from '@/engine/cesium/models/templates';
 
-export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights' | 'terrain' | 'clouds' | 'sun' | 'moon' | 'stars' | 'eclipseShadow' | 'velocityVector', boolean>;
+export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights' | 'terrain' | 'clouds' | 'sun' | 'moon' | 'stars' | 'eclipseShadow' | 'velocityVector' | 'graticule', boolean>;
 export type { CameraMode };
 export type BottomTab = 'timeline' | 'orbit' | 'access';
 export type MapMode = '3d' | 'split' | '2d';
@@ -47,6 +48,7 @@ interface State {
   mapMode: MapMode;
   style: StyleSettings;
   look: EarthLook;
+  modelStyle: ModelStyle;
   hidden: Record<string, boolean>;
   sizes: { left: number; right: number; bottom: number; map: number };
   modelView: boolean;
@@ -85,6 +87,7 @@ interface State {
   setMapMode: (m: MapMode) => void;
   setStyle: (p: Partial<StyleSettings>) => void;
   setLook: (l: EarthLook) => void;
+  setModelStyle: (m: ModelStyle) => void;
   toggleHidden: (id: string) => void;
   setSize: (k: 'left' | 'right' | 'bottom' | 'map', v: number) => void;
   setModelView: (b: boolean) => void;
@@ -102,6 +105,13 @@ interface State {
   snapshot: () => ScenarioFile;
 }
 
+/** Layer presets applied when the Earth look changes. */
+export const LOOK_PRESETS: Record<EarthLook, Partial<Layers>> = {
+  schematic: { graticule: true, stars: false, sun: false, moon: false, cityLights: false, clouds: false, lighting: false, groundTracks: false, nadirLine: false, atmosphere: true },
+  standard: { graticule: false, stars: true, sun: true, moon: true, cityLights: false, clouds: false, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
+  cinematic: { graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
+};
+
 const STATION_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#06b6d4'];
 const rid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -111,7 +121,7 @@ function derive(base: Satellite[], events: SimEvent[]) {
   return { satellites: d.satellites, eventInfo: d.status };
 }
 
-const demo = buildCollisionDemo();
+const demo = buildNapa2Demo();
 clock.setRange(demo.clock.start, demo.clock.end, demo.clock.time);
 const firstDerived = derive(demo.satellites, demo.events);
 
@@ -119,9 +129,9 @@ export const useStore = create<State>((set, get) => ({
   scenarioId: demo.id, scenarioName: demo.name, baseSatellites: demo.satellites, events: demo.events,
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
-  layers: { ...DEFAULT_LAYERS } as Layers, clock: clock.snapshot(), cameraMode: 'closeup', views: [],
-  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: true, dialog: null, editingEvent: null,
-  settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: [demo.satellites[0].id, demo.satellites[1].id],
+  layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.schematic } as Layers, clock: clock.snapshot(), cameraMode: 'closeup', views: [],
+  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'schematic', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: true, dialog: null, editingEvent: null,
+  settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,
   presentation: false, uiHidden: false, toast: null,
 
   addTles: (tles, source) => set((s) => {
@@ -178,7 +188,8 @@ export const useStore = create<State>((set, get) => ({
     : set({ bottomTab: t as BottomTab, panels: { ...get().panels, bottom: true } }),
   setMapMode: (mapMode) => set({ mapMode }),
   setStyle: (p) => set((s) => ({ style: { ...s.style, ...p } })),
-  setLook: (look) => set((s) => ({ look, layers: { ...s.layers, cityLights: look === 'cinematic', clouds: look === 'cinematic' } })),
+  setLook: (look) => set((s) => ({ look, layers: { ...s.layers, ...LOOK_PRESETS[look] } as Layers })),
+  setModelStyle: (modelStyle) => set({ modelStyle }),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
   setRightTab: (rightTab) => set({ rightTab, panels: { ...get().panels, right: true } }),
   setSize: (k, v) => set((s) => ({ sizes: { ...s.sizes, [k]: Math.round(Math.min(k === 'bottom' ? 560 : 900, Math.max(k === 'bottom' ? 120 : 200, v))) } })),
@@ -202,7 +213,7 @@ export const useStore = create<State>((set, get) => ({
     set({
       scenarioId: f.id, scenarioName: f.name, baseSatellites: f.satellites, events: f.events, ...d, stations: f.stations,
       selectedId: f.satellites[0]?.id ?? null, secondId: f.satellites[1]?.id ?? null, selectedStationId: f.stations[0]?.id ?? null,
-      layers: { ...DEFAULT_LAYERS, ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: get().modelView ? 'closeup' : 'earth',
+      layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS[get().look], ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: get().modelView ? 'closeup' : 'earth',
       settings: { ...DEFAULT_SETTINGS, ...f.settings }, style: { ...DEFAULT_STYLE, ...(f.style ?? {}) }, heatmap: null, target: null,
       conjunctionPair: f.satellites.length > 1 ? [f.satellites[0].id, f.satellites[1].id] : null, dialog: null,
     });

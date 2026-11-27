@@ -4,6 +4,7 @@ import { LeftPanel } from '@/components/panels/LeftPanel';
 import { RightDock } from '@/components/layout/RightDock';
 import { ResizeHandle } from '@/components/layout/ResizeHandle';
 import { ModelViewOverlay } from '@/components/layout/ModelViewOverlay';
+import { ContactBadge } from '@/components/layout/ContactBadge';
 import { TimelineBar } from '@/components/timeline/TimelineBar';
 import { Map2D } from '@/components/layout/Map2D';
 import { TimelineView } from '@/components/timeline/TimelineView';
@@ -65,6 +66,7 @@ export function App() {
               <Suspense fallback={<div className="p-4 text-slate-400">Loading 3D engine…</div>}><CesiumView /></Suspense>
               {presentation && !uiHidden && <><PresentationOverlay /><button className="absolute top-2 right-2 z-40 btn" onClick={() => useStore.getState().setPresentation(false)}>Exit presentation</button></>}
               {modelView && !uiHidden && <ModelViewOverlay />}
+              {!uiHidden && <ContactBadge />}
               {!bare && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}
             </div>
             {!bare && mapMode !== '3d' && <>{mapMode === 'split' && <ResizeHandle dir="x" onDrag={(d) => setSize('map', sizes.map - d)} />}<div style={mapMode === 'split' ? { width: sizes.map } : undefined} className={`min-w-0 relative ${mapMode === '2d' ? 'flex-1' : 'shrink-0'}`}><Map2D />{mapMode === '2d' && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}</div></>}

@@ -19,5 +19,5 @@ export const DEFAULT_STYLE: StyleSettings = {
   footprintOpacity: 0.28, heatmapOpacity: 0.65, cloudOpacity: 0.4, shadowOpacity: 0.28, atmosphere: 1, exaggeration: 1,
 };
 
-/** 'standard' = plain, smooth Earth (imagery + simple atmosphere + day/night shading); 'cinematic' = HDR, bloom, glow, city lights, clouds. */
-export type EarthLook = 'standard' | 'cinematic';
+/** 'schematic' = technical blue globe with a lat/lon graticule, thin orbit rings, flat dark background; 'standard' = plain, smooth Earth (imagery + simple atmosphere + day/night shading); 'cinematic' = HDR, bloom, glow, city lights, clouds. */
+export type EarthLook = 'schematic' | 'standard' | 'cinematic';

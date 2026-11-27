@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODEL_KINDS, buildModelGlb, modelKindFor } from './templates';
+import { MODEL_KINDS, SUBSYSTEMS, buildModelGlb, hasSubsystemView, modelKindFor } from './templates';
 import { buildCollisionDemoSatellites } from '../../data/demoScenario';
 import { parseTleText, satelliteFromTle } from '../../data/tle';
 import { DEMO_TLE_TEXT } from '../../data/demo';
@@ -21,6 +21,14 @@ describe('procedural spacecraft models', () => {
     for (const a of json.accessors.filter((x: { type: string }) => x.type === 'VEC3')) expect(a.count).toBeGreaterThan(0);
     const floats = new Float32Array(buf.slice(binOff + 8, binOff + 8 + json.accessors[0].count * 12));
     expect(floats.every(Number.isFinite)).toBe(true);
+  });
+  it('NAPA-2 has a subsystem view: translucent shell + 6 colour-coded internals, valid GLB', () => {
+    expect(hasSubsystemView('napa2')).toBe(true); expect(hasSubsystemView('generic')).toBe(false);
+    const buf = buildModelGlb('napa2', 'subsystems'), dv = new DataView(buf);
+    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, dv.getUint32(12, true))));
+    expect(json.materials.length).toBeGreaterThanOrEqual(SUBSYSTEMS.length + 1);
+    expect(json.materials.some((m: { alphaMode: string }) => m.alphaMode === 'BLEND')).toBe(true);
+    expect(modelKindFor({ ...buildCollisionDemoSatellites()[0], name: 'NAPA-2' })).toBe('napa2');
   });
   it('maps real vehicles to their template by NORAD id / name; unknown LEO → generic', () => {
     const iss = satelliteFromTle(parseTleText(DEMO_TLE_TEXT).tles[0], 'REAL_TLE', 't');

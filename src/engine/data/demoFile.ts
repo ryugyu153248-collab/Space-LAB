@@ -6,12 +6,12 @@ import { screenConjunctions } from '../analysis/conjunction';
 import { minimumAvoidanceDv } from '../analysis/avoidance';
 import type { ScenarioFile } from './scenario';
 import { SCHEMA_VERSION } from './scenario';
-import { DEG } from '../orbital/constants';
+import { DEG, R_EARTH } from '../orbital/constants';
 
 export const DEFAULT_LAYERS: Record<string, boolean> = {
   satellites: true, labels: true, orbits: true, groundTracks: true, nadirLine: true, atmosphere: true, lighting: true,
   stations: true, visibilityCones: true, commLinks: true, debris: true, saa: false, coverage: true, eventEffects: true,
-  bodyAxes: true, footprints: true, conjunction: true, models: true, hiresImagery: true, cityLights: false, terrain: true, clouds: false, sun: true, moon: true, stars: true, eclipseShadow: false, velocityVector: true,
+  bodyAxes: true, footprints: true, conjunction: true, models: true, hiresImagery: true, cityLights: false, terrain: true, clouds: false, sun: true, moon: true, stars: true, eclipseShadow: false, velocityVector: true, graticule: false,
 };
 export const DEFAULT_SETTINGS = { stormLevel: 0, covPrimary: 100, covSecondary: 100, hbr: 10, useCovariance: false };
 
@@ -31,6 +31,7 @@ export function emptyScenario(name: string, sats: Satellite[], start: number, da
 export function buildCollisionDemo(): ScenarioFile {
   const sats = buildCollisionDemoSatellites();
   const f = emptyScenario('LEO Collision Avoidance Demonstration', sats, DEMO_T0, 1);
+  f.stations = [bangkokStation('#ef4444')];
   const [a, b] = sats;
   const conj = screenConjunctions(a, [b], DEMO_T0, DEMO_T0 + 6 * 3600_000, { screenDistance: 50_000 }).sort((x, y) => x.tca - y.tca)[0];
   if (conj) {
@@ -51,5 +52,21 @@ export function buildIssSample(): ScenarioFile {
   const f = emptyScenario('ISS historic TLE sample (2008)', sats, startTime, 3);
   f.stations = [{ ...bangkokStation() }];
   void DEG;
+  return f;
+}
+
+/**
+ * NAPA-2-style 6U CubeSat over Bangkok. The ORBIT IS ASSUMED (sun-synchronous 97.6° inclination, 550 km, circular, two-body) — it is NOT the
+ * real NAPA-2 element set (fetch the real one from CelesTrak: + Satellite → Real satellites → NAPA-2). Sensor half-angle is a placeholder.
+ */
+export function buildNapa2Demo(): ScenarioFile {
+  const sat: Satellite = {
+    id: 'sat-napa2', name: 'NAPA-2 (assumed orbit)',
+    source: { kind: 'elements', epoch: DEMO_T0, elements: { a: R_EARTH + 550e3, e: 0, i: 97.6 * DEG, raan: 40 * DEG, argp: 0, nu: 0 } },
+    origin: 'SIMULATED', provenance: 'Simulated – assumed sun-synchronous orbit (i = 97.6°, h = 550 km), not the real NAPA-2 elements', epoch: DEMO_T0, color: '#60a5fa',
+    props: { massKg: 8, propellantKg: 0.4, cd: 2.2, area: 0.06, sensorHalfAngle: 3 * DEG, panelArea: 0.08, panelEfficiency: 0.3, batteryWh: 40, busLoadW: 8, commLoadW: 6 },
+  };
+  const f = emptyScenario('NAPA-2 CubeSat — Bangkok contact demo', [sat], DEMO_T0, 1);
+  f.stations = [{ ...bangkokStation('#ef4444') }];
   return f;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '@/stores/store';
 import { localDelete, localGet, localList, localPut } from '@/engine/data/localStore';
 import { parseScenario, serializeScenario } from '@/engine/data/scenario';
-import { buildCollisionDemo, buildIssSample, emptyScenario } from '@/engine/data/demoFile';
+import { buildCollisionDemo, buildIssSample, buildNapa2Demo, emptyScenario } from '@/engine/data/demoFile';
 import { downloadText, safeName } from '@/engine/exporters/files';
 import { clock } from '@/engine/simulation/runtime';
 import { inputCls } from '../common/ui';
@@ -30,6 +30,7 @@ export function ScenarioDialog() {
           <button className="btn btn-on whitespace-nowrap" onClick={() => run(async () => { await localPut(snap()); await refresh(); setMsg('Saved to this browser (IndexedDB).'); })}>Save locally</button>
           <button className="btn whitespace-nowrap" onClick={() => downloadText(serializeScenario(snap()), `${safeName(name)}.scenario.json`, 'application/json')}>Export JSON</button></div>
         <div className="flex gap-2 items-center flex-wrap"><span className="text-slate-400">New / built-in:</span>
+          <button className="btn" onClick={() => loadScenario(buildNapa2Demo())}>NAPA-2 CubeSat demo</button>
           <button className="btn" onClick={() => loadScenario(buildCollisionDemo())}>LEO collision-avoidance demo</button>
           <button className="btn" onClick={() => loadScenario(buildIssSample())}>ISS historic TLE sample</button>
           <button className="btn" onClick={() => loadScenario(emptyScenario('Untitled scenario', [], clock.time, 1))}>Empty</button>
