@@ -11,7 +11,7 @@ import { DEFAULT_LAYERS, DEFAULT_SETTINGS, buildCollisionDemo } from '@/engine/d
 import type { CoverageResult } from '@/engine/analysis/coverage';
 import type { CameraMode } from '@/engine/cesium/CesiumScene';
 
-export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction', boolean>;
+export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights', boolean>;
 export type { CameraMode };
 export type BottomTab = 'orbit' | 'access' | 'maneuver' | 'conjunction' | 'events' | 'coverage' | 'telemetry' | 'report';
 export type Dialog = null | 'import' | 'station' | 'scenario' | 'export' | 'capture';
@@ -49,7 +49,7 @@ interface State {
   uiHidden: boolean;
   toast: string | null;
 
-  addTles: (tles: ParsedTle[]) => void;
+  addTles: (tles: ParsedTle[], source?: { origin: Satellite['origin']; provenance: string }) => void;
   addSimulated: (el: ClassicalElements, name: string, epoch: number) => void;
   removeSatellite: (id: string) => void;
   updateSatellite: (id: string, patch: Partial<Satellite>) => void;
@@ -105,8 +105,8 @@ export const useStore = create<State>((set, get) => ({
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: [demo.satellites[0].id, demo.satellites[1].id],
   presentation: false, uiHidden: false, toast: null,
 
-  addTles: (tles) => set((s) => {
-    const added = tles.map((t) => satelliteFromTle(t, 'USER_TLE', 'User-supplied TLE (imported)'));
+  addTles: (tles, source) => set((s) => {
+    const added = tles.map((t) => satelliteFromTle(t, source?.origin ?? 'USER_TLE', source?.provenance ?? 'User-supplied TLE (imported)'));
     const base = [...s.baseSatellites, ...added];
     return { baseSatellites: base, ...derive(base, s.events), selectedId: added[0]?.id ?? s.selectedId };
   }),

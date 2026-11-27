@@ -4,6 +4,8 @@ import { useStore } from '@/stores/store';
 import { parseTleText } from '@/engine/data/tle';
 import { clock } from '@/engine/simulation/runtime';
 import { DEG, R_EARTH } from '@/engine/orbital/constants';
+import { PRESETS, fetchCelestrak, type CelestrakQuery } from '@/engine/data/celestrak';
+import { jumpTo } from '@/engine/simulation/runtime';
 
 const ElSchema = z.object({
   name: z.string().min(1),
@@ -19,7 +21,9 @@ export function ImportDialog() {
   const { dialog, setDialog, addTles, addSimulated } = useStore();
   const importOpen = dialog === 'import';
   const setImportOpen = (b: boolean) => setDialog(b ? 'import' : null);
-  const [tab, setTab] = useState<'tle' | 'coe'>('tle');
+  const [tab, setTab] = useState<'live' | 'tle' | 'coe'>('live');
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
   const [text, setText] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [f, setF] = useState({ name: 'SIM-SAT', altKm: '700', e: '0', i: '98', raan: '0', argp: '0', nu: '0' });
@@ -39,22 +43,43 @@ export function ImportDialog() {
     addSimulated({ a, e: v.e, i: v.i * DEG, raan: v.raan * DEG, argp: v.argp * DEG, nu: v.nu * DEG }, v.name, clock.time);
     setErrors([]); setImportOpen(false);
   };
+  const live = async (query: CelestrakQuery, limit = 25) => {
+    setBusy(true); setErrors([]);
+    try {
+      const r = await fetchCelestrak(query, limit);
+      const stamp = new Date().toISOString().slice(0, 19) + 'Z';
+      addTles(r.tles, { origin: 'REAL_TLE', provenance: `Live TLE from CelesTrak, fetched ${stamp}` });
+      // real satellites are only meaningful near "now": move the clock there when the newest element set is recent
+      const newest = Math.max(...r.tles.map((t) => t.epoch));
+      if (Date.now() - newest < 14 * 86_400_000) jumpTo(Date.now());
+      setImportOpen(false);
+    } catch (e) { setErrors([e instanceof Error ? e.message : String(e)]); }
+    setBusy(false);
+  };
   const onFile = async (file?: File) => { if (file) setText(await file.text()); };
 
   return (
     <div className="absolute inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => setImportOpen(false)}>
       <div className="w-[560px] max-w-[95vw] bg-panel border border-edge rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex border-b border-edge">
-          {(['tle', 'coe'] as const).map((k) => (
+          {(['live', 'tle', 'coe'] as const).map((k) => (
             <button key={k} className={`px-4 py-2 ${tab === k ? 'text-accent border-b-2 border-accent' : 'text-slate-400'}`} onClick={() => { setTab(k); setErrors([]); }}>
-              {k === 'tle' ? 'TLE (paste / file)' : 'Classical elements (simulated)'}
+              {k === 'live' ? 'Real satellites (live)' : k === 'tle' ? 'TLE (paste / file)' : 'Classical elements (simulated)'}
             </button>
           ))}
           <div className="flex-1" />
           <button className="px-3 text-slate-500" onClick={() => setImportOpen(false)}>✕</button>
         </div>
         <div className="p-4 space-y-2">
-          {tab === 'tle' ? (
+          {tab === 'live' ? (
+            <>
+              <div className="flex flex-wrap gap-2">{PRESETS.map((p) => <button key={p.label} disabled={busy} className="btn" onClick={() => live(p.query, p.limit)}>{p.label}</button>)}</div>
+              <div className="flex gap-2"><input className="w-full bg-black/50 border border-edge rounded px-2 py-1 num text-slate-100" placeholder="NORAD ID (e.g. 25544) or name (e.g. NOAA 19)" value={q} onChange={(e) => setQ(e.target.value)} />
+                <button disabled={busy || !q.trim()} className="btn btn-on whitespace-nowrap" onClick={() => live(/^\d{1,9}$/.test(q.trim()) ? { catnr: q } : { name: q }, 10)}>Fetch</button></div>
+              {busy && <div className="text-accent animate-pulse">Fetching from CelesTrak…</div>}
+              <p className="text-[10px] text-slate-500">Downloads the current public element sets from CelesTrak (no key) in your browser, adds them as REAL satellites with a 3D model matching the vehicle, and moves the simulation clock to now. If the request is blocked, paste TLEs in the next tab.</p>
+            </>
+          ) : tab === 'tle' ? (
             <>
               <textarea className="w-full h-40 bg-black/50 border border-edge rounded p-2 num text-[11px]" spellCheck={false}
                 placeholder={'ISS (ZARYA)\n1 25544U ...\n2 25544 ...'} value={text} onChange={(e) => setText(e.target.value)} />

@@ -10,6 +10,7 @@ import { lookAngles } from '@/engine/orbital/lookangles';
 import { nextContact } from '@/engine/analysis/access';
 import { useAccess } from '@/hooks/useAccess';
 import { DEG } from '@/engine/orbital/constants';
+import { MODEL_LABEL, modelKindFor } from '@/engine/cesium/models/templates';
 import { Badge, Row } from '../common/Row';
 import { deg, duration, fmt, km } from '@/utils/format';
 
@@ -98,6 +99,7 @@ export function RightPanel() {
       <Row label="Epoch" value={formatUtc(sat.epoch)} />
       {age && <Row label="Epoch offset @ sim time" value={`${age.days >= 0 ? '+' : ''}${age.days.toFixed(2)} d`} />}
       <Row label="Propagator" value={model} />
+      {sat.kind !== 'debris' && <Row label="3D model" value={MODEL_LABEL[modelKindFor(sat)]} title="Simplified procedural illustration, not CAD" />}
       <div className="px-3 text-[10px] text-slate-500 leading-snug">{sat.provenance}. Fidelity: {fidelity}.</div>
       {age && age.level === 'stale' && (
         <div className="mx-3 mt-2 p-2 rounded border border-red-700 bg-red-950/40 text-red-300 text-[11px]">

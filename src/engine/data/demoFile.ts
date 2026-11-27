@@ -11,7 +11,7 @@ import { DEG } from '../orbital/constants';
 export const DEFAULT_LAYERS: Record<string, boolean> = {
   satellites: true, labels: true, orbits: true, groundTracks: true, nadirLine: true, atmosphere: true, lighting: true,
   stations: true, visibilityCones: true, commLinks: true, debris: true, saa: false, coverage: true, eventEffects: true,
-  bodyAxes: true, footprints: true, conjunction: true,
+  bodyAxes: true, footprints: true, conjunction: true, models: true, hiresImagery: true, cityLights: true,
 };
 export const DEFAULT_SETTINGS = { stormLevel: 0, covPrimary: 100, covSecondary: 100, hbr: 10, useCovariance: false };
 

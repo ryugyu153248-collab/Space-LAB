@@ -1,8 +1,8 @@
 import {
   Cartesian2, Cartesian3, CallbackProperty, Color, ColorMaterialProperty, ConstantPositionProperty, Entity, HeightReference,
-  ImageryLayer, Ion, Matrix4, JulianDate, LabelStyle, PolygonHierarchy, PolylineDashMaterialProperty, Rectangle, ScreenSpaceEventHandler,
+  ImageryLayer, Ion, Matrix4, ModelGraphics, ConstantProperty, JulianDate, LabelStyle, PolygonHierarchy, PolylineDashMaterialProperty, Rectangle, ScreenSpaceEventHandler,
   ScreenSpaceEventType, SingleTileImageryProvider, Terrain, TileMapServiceImageryProvider, VerticalOrigin, Viewer, buildModuleUrl,
-  createWorldImageryAsync, defined, Ellipsoid,
+  createWorldImageryAsync, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
 } from 'cesium';
 import type { GroundStation, Maneuver, Satellite, Vec3 } from '@/types';
 import type { SimulationClock } from '../simulation/SimulationClock';
@@ -15,7 +15,8 @@ import { derivedElements, rvToElements } from '../orbital/elements';
 import { gmst } from '../orbital/time';
 import { pointFromState, stepForPeriod, type EphemerisPoint } from '../orbital/ephemeris';
 import { burnDirection } from '../orbital/maneuvers';
-import { attitudeAt, quatRotate, sensorFootprint, type AttitudeContext } from '../orbital/attitude';
+import { attitudeAt, quatRotate, sensorFootprint, targetQuat, type AttitudeContext, type Quat } from '../orbital/attitude';
+import { modelKindFor, modelUrl, type ModelKind } from './models/templates';
 import { sunPositionEci } from '../orbital/sun';
 import { saaOutline } from '../orbital/environment';
 import type { SimEvent } from '../events/EventTypes';
@@ -31,6 +32,7 @@ interface PathCache { tRef: number; period: number; samples: EphemerisPoint[]; g
 interface Sat3D {
   sat: Satellite;
   light: boolean;
+  kind?: ModelKind;
   entity: Entity;
   pos: ConstantPositionProperty;
   extras: Entity[];
@@ -64,6 +66,8 @@ export class CesiumScene {
   private layers: Layers | null = null;
   private handler: ScreenSpaceEventHandler;
   private disposed = false;
+  private hires: ImageryLayer | null = null;
+  private lights: ImageryLayer | null = null;
   private camMode: CameraMode = 'earth';
   private camCtx: CameraContext = { stationId: null, secondId: null };
   private pickMode = false;
@@ -97,6 +101,17 @@ export class CesiumScene {
     v.clock.currentTime = JulianDate.fromDate(new Date(clock.time));
     const provider = token ? createWorldImageryAsync() : TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII'));
     v.imageryLayers.add(ImageryLayer.fromProviderAsync(provider as Promise<never>));
+    if (!token) {
+      // Free NASA GIBS layers drawn over the offline base (public tiles, no key). If the network blocks them the offline base remains.
+      const gibs = (layer: string, ext: string, credit: string) => new ImageryLayer(new UrlTemplateImageryProvider({
+        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.${ext}`,
+        tilingScheme: new WebMercatorTilingScheme(), maximumLevel: 8, credit,
+      }));
+      this.hires = gibs('BlueMarble_ShadedRelief_Bathymetry', 'jpeg', 'NASA GIBS – Blue Marble');
+      this.lights = gibs('VIIRS_Black_Marble', 'png', 'NASA GIBS – VIIRS Black Marble');
+      this.lights.dayAlpha = 0; this.lights.nightAlpha = 1;
+      v.imageryLayers.add(this.hires); v.imageryLayers.add(this.lights);
+    }
 
     const scene = v.scene;
     scene.globe.enableLighting = true;
@@ -105,6 +120,11 @@ export class CesiumScene {
     scene.highDynamicRange = false;
     scene.fog.enabled = false;
     scene.globe.depthTestAgainstTerrain = false;
+    scene.globe.maximumScreenSpaceError = 1.5;
+    scene.globe.atmosphereLightIntensity = 14;
+    scene.postProcessStages.fxaa.enabled = true;
+    const bloom = scene.postProcessStages.bloom;
+    bloom.enabled = true; bloom.uniforms.brightness = -0.35; bloom.uniforms.contrast = 110; bloom.uniforms.glowOnly = false;
     v.camera.setView({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7) });
 
     const pts = saaOutline();
@@ -188,6 +208,7 @@ export class CesiumScene {
     for (const s of this.sats.values()) {
       const show = s.light ? l.debris : l.satellites;
       s.entity.show = show;
+      if (s.entity.model) s.entity.model.show = l.models as never;
       if (s.entity.label) s.entity.label.show = l.labels as never;
       const e = s.entities;
       if (e.orbitPast) e.orbitPast.show = e.orbitFuture!.show = l.orbits;
@@ -197,6 +218,8 @@ export class CesiumScene {
     }
     for (const g of this.stns.values()) { g.entity.show = l.stations; g.cone.show = l.stations && l.visibilityCones; }
     this.saa.show = l.saa;
+    if (this.hires) this.hires.show = l.hiresImagery;
+    if (this.lights) this.lights.show = l.cityLights;
     if (this.heatLayer) this.heatLayer.show = l.coverage;
     for (const x of this.effects) x.entity.show = l.eventEffects;
   }
@@ -349,19 +372,28 @@ export class CesiumScene {
     const arrays = { orbitPast: [] as Cartesian3[], orbitFuture: [] as Cartesian3[], gtPast: [] as Cartesian3[], gtFuture: [] as Cartesian3[], nadir: [Cartesian3.ZERO, Cartesian3.ZERO], ghost: [] as Cartesian3[] };
     const entity = v.entities.add({
       name: sat.name, position: pos,
-      point: { pixelSize: light ? 3 : 8, color, outlineColor: light ? color : Color.WHITE, outlineWidth: light ? 0 : 1, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-      label: light ? undefined : { text: sat.name, font: '12px ui-monospace, monospace', fillColor: Color.WHITE, style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, outlineColor: Color.BLACK, verticalOrigin: VerticalOrigin.BOTTOM, pixelOffset: new Cartesian2(0, -12), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      point: { pixelSize: light ? 3 : 5, color, outlineColor: light ? color : Color.WHITE, outlineWidth: light ? 0 : 1, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: light ? undefined : { text: sat.name, font: '12px ui-monospace, monospace', fillColor: Color.WHITE, style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, outlineColor: Color.BLACK, showBackground: true, backgroundColor: Color.fromCssColorString('#050a14').withAlpha(0.6), verticalOrigin: VerticalOrigin.BOTTOM, pixelOffset: new Cartesian2(0, -38), disableDepthTestDistance: Number.POSITIVE_INFINITY },
     });
-    const s3: Sat3D = { sat, light, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map() };
+    let kind: ModelKind | undefined;
+    if (!light) {
+      kind = modelKindFor(sat);
+      const m = modelUrl(kind);
+      // true-size model that never shrinks below ~64 px, so it is visible from orbit-scale distances and detailed when zoomed in
+      entity.model = new ModelGraphics({ uri: m.url, minimumPixelSize: 64, maximumScale: 20000, scale: 1, runAnimations: false });
+      entity.orientation = new ConstantProperty(Quaternion.IDENTITY);
+      entity.viewFrom = new ConstantProperty(new Cartesian3(0, -m.radius * 5, m.radius * 2.5));
+    }
+    const s3: Sat3D = { sat, light, kind, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map() };
     if (light) return s3;
-    const line = (name: string, get: () => Cartesian3[], c: Color, width: number, dashed = false) =>
-      v.entities.add({ name, polyline: { positions: new CallbackProperty(get, false), width, arcType: 0 as never, material: dashed ? new PolylineDashMaterialProperty({ color: c, dashLength: 12 }) : new ColorMaterialProperty(c) } });
+    const line = (name: string, get: () => Cartesian3[], c: Color, width: number, dashed = false, glow = false) =>
+      v.entities.add({ name, polyline: { positions: new CallbackProperty(get, false), width: glow ? width * 3 : width, arcType: 0 as never, material: glow ? new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c }) : dashed ? new PolylineDashMaterialProperty({ color: c, dashLength: 12 }) : new ColorMaterialProperty(c) } });
     s3.nadirPos = new ConstantPositionProperty(Cartesian3.ZERO);
     s3.entities = {
       nadirPoint: v.entities.add({ position: s3.nadirPos, point: { pixelSize: 5, color: color.withAlpha(0.9) } }),
       nadirLine: line(`${sat.name} nadir`, () => arrays.nadir, color.withAlpha(0.35), 1),
       orbitPast: line(`${sat.name} past orbit`, () => arrays.orbitPast, color.withAlpha(0.35), 1.5),
-      orbitFuture: line(`${sat.name} future orbit`, () => arrays.orbitFuture, color.withAlpha(0.95), 2),
+      orbitFuture: line(`${sat.name} future orbit`, () => arrays.orbitFuture, color.withAlpha(0.95), 2, false, true),
       gtPast: line(`${sat.name} past ground track`, () => arrays.gtPast, Color.WHITE.withAlpha(0.35), 1.5),
       gtFuture: line(`${sat.name} future ground track`, () => arrays.gtFuture, Color.YELLOW.withAlpha(0.9), 2, true),
       ghost: line(`${sat.name} orbit without maneuver`, () => arrays.ghost, Color.WHITE.withAlpha(0.55), 1.5, true),
@@ -382,6 +414,8 @@ export class CesiumScene {
     v.clock.currentTime = JulianDate.fromDate(new Date(t));
     const th = gmst(t), c = Math.cos(th), sn = Math.sin(th);
     const states = new Map<string, { rE: Vec3; cart: Cartesian3 }>();
+    const sunEci = sunPositionEci(t);
+    const hz = th / 2, qz: Quat = [Math.cos(hz), 0, 0, -Math.sin(hz)]; // ECI→ECEF rotation (−θ about z)
 
     for (const s3 of this.sats.values()) {
       const st = propagateSatellite(s3.sat, t);
@@ -391,6 +425,10 @@ export class CesiumScene {
       s3.pos.setValue(cart);
       states.set(s3.sat.id, { rE, cart });
       if (s3.light) { s3.entity.show = this.layers?.debris ?? true; continue; }
+      const qb = s3.sat.attitude?.length
+        ? attitudeAt(s3.sat.attitude, t, (tt): AttitudeContext | null => { const x = propagateSatellite(s3.sat, tt); return x ? { r: x.r, v: x.v, sunEci: sunPositionEci(tt), utcMs: tt } : null; })
+        : targetQuat({ mode: 'nadir' }, { r: st.r, v: st.v, sunEci, utcMs: t });
+      if (qb) { const q = quatMul(qz, qb); (s3.entity.orientation as ConstantProperty).setValue(new Quaternion(q[1], q[2], q[3], q[0])); }
       const L = this.layers;
       s3.entity.show = L?.satellites ?? true;
       for (const [k, e] of Object.entries(s3.entities)) if (e) e.show = k === 'ghost' ? (L?.orbits ?? true) && !!s3.sat.maneuvers?.length : k.startsWith('gt') ? L?.groundTracks ?? true : k.startsWith('nadir') ? L?.nadirLine ?? true : L?.orbits ?? true;
@@ -580,6 +618,11 @@ export class CesiumScene {
     this.handler.destroy();
     this.viewer.destroy();
   }
+}
+
+/** Hamilton product a⊗b of [w,x,y,z] quaternions. */
+function quatMul(a: Quat, b: Quat): Quat {
+  return [a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3], a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2], a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1], a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]];
 }
 
 /** Burn active at time t: finite burns while running; impulsive ones flash for 60 s after ignition. */

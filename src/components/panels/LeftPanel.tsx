@@ -3,11 +3,11 @@ import { Badge } from '../common/Row';
 import { tleStaleness } from '@/engine/data/tle';
 
 const LAYER_LABELS: [keyof Layers, string][] = [
-  ['satellites', 'Satellites'], ['labels', 'Labels'], ['orbits', 'Orbit paths (past / future / pre-maneuver)'],
+  ['satellites', 'Satellites'], ['models', '3D spacecraft models'], ['labels', 'Labels'], ['orbits', 'Orbit paths (past / future / pre-maneuver)'],
   ['groundTracks', 'Ground tracks'], ['nadirLine', 'Sub-satellite point / nadir'], ['footprints', 'Sensor cone & footprint'], ['bodyAxes', 'Body axes (attitude)'],
   ['stations', 'Ground stations'], ['visibilityCones', 'Visibility cones (ground circle)'], ['commLinks', 'Communication links'],
   ['conjunction', 'Conjunction line'], ['debris', 'Debris'], ['eventEffects', 'Event effects (burn vector, plume, impact)'],
-  ['coverage', 'Coverage heatmap'], ['saa', 'South Atlantic Anomaly (simulated)'], ['atmosphere', 'Atmosphere'], ['lighting', 'Day/night lighting (Sun)'],
+  ['coverage', 'Coverage heatmap'], ['saa', 'South Atlantic Anomaly (simulated)'], ['hiresImagery', 'High-res imagery (NASA GIBS, online)'], ['cityLights', 'City lights at night (online)'], ['atmosphere', 'Atmosphere'], ['lighting', 'Day/night lighting (Sun)'],
 ];
 
 export function LeftPanel() {
