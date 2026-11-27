@@ -34,7 +34,7 @@ table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:12px}th,td{bo
 .note{background:#fef9c3;border-left:4px solid #eab308;padding:.4rem .8rem;margin:.6rem 0}.bad{color:#b91c1c}.ok{color:#15803d}code{background:#f1f5f9;padding:0 3px}`;
 
 const page = (title: string, body: string) =>
-  `<!doctype html><html><head><meta charset="utf-8"><title>${h(title)}</title><style>${css}</style></head><body><h1>${h(title)}</h1><p>Generated ${new Date().toISOString()} by ORBITAL LAB (UTC). All values are computed from the simulation state; see model-fidelity notes.</p>${body}</body></html>`;
+  `<!doctype html><html><head><meta charset="utf-8"><title>${h(title)}</title><style>${css}</style></head><body><h1>${h(title)}</h1><p>Generated ${new Date().toISOString()} by SPACE LAB (UTC). All values are computed from the simulation state; see model-fidelity notes.</p>${body}</body></html>`;
 
 const fidelity = (s: Satellite) => {
   const d = dynamicsOf(s);

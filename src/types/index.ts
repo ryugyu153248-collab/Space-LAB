@@ -2,7 +2,7 @@
 
 export type Vec3 = [number, number, number];
 
-/** Reference frames used in ORBITAL LAB. ECI == TEME axes in Phase 1 (see docs/ARCHITECTURE.md §5). */
+/** Reference frames used in SPACE LAB. ECI == TEME axes in Phase 1 (see docs/ARCHITECTURE.md §5). */
 export type Frame = 'TEME' | 'ECI' | 'ECEF';
 
 export type PropagationModel = 'SGP4' | 'TWOBODY' | 'NUMERICAL';

@@ -1,4 +1,4 @@
-# SPACE LAB (ORBITAL LAB engine)
+# SPACE LAB
 
 Web-based space-mission simulation & analysis platform (STK-inspired): CesiumJS 3D globe + an in-browser orbital-mechanics,
 events, SSA, coverage and reporting engine. React · TypeScript · Vite · Tailwind · Zustand · Recharts · Zod · satellite.js.

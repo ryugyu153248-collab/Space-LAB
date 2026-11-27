@@ -33,14 +33,14 @@ export function CaptureDialog() {
       const before = useStore.getState().panels; void before;
       if (hideUi) { setUiHidden(true); await wait(450); }
       const blob = await scene().screenshot(scale, overlay);
-      downloadBlob(blob, `orbital-lab_${stamp()}.png`);
+      downloadBlob(blob, `space-lab_${stamp()}.png`);
       setMsg(`PNG saved (${scale}× resolution).`);
     } catch (e) { setMsg(String(e)); }
     setUiHidden(false);
   };
   const ext = (mime: string) => (mime.includes('mp4') ? 'mp4' : 'webm');
   const startVideo = () => { try { const r = scene().startRecording(overlay, mp4); setRecording(true); setMsg(`Recording (${r.mime})…`); } catch (e) { setMsg(String(e)); } };
-  const stopVideo = async () => { const b = await scene().stopRecording(); setRecording(false); downloadBlob(b, `orbital-lab_${stamp()}.${ext(b.type)}`); setMsg(`Video saved (${b.type || 'webm'}, ${(b.size / 1e6).toFixed(1)} MB).`); };
+  const stopVideo = async () => { const b = await scene().stopRecording(); setRecording(false); downloadBlob(b, `space-lab_${stamp()}.${ext(b.type)}`); setMsg(`Video saved (${b.type || 'webm'}, ${(b.size / 1e6).toFixed(1)} MB).`); };
 
   const recordEvent = async () => {
     const ev = events.find((e) => e.id === evId);
@@ -60,7 +60,7 @@ export function CaptureDialog() {
       clock.pause();
       const b = await sc.stopRecording();
       setRecording(false); setUiHidden(false); setProg(null);
-      downloadBlob(b, `orbital-lab_${ev.name.replace(/\W+/g, '_')}_${stamp()}.${ext(b.type)}`);
+      downloadBlob(b, `space-lab_${ev.name.replace(/\W+/g, '_')}_${stamp()}.${ext(b.type)}`);
       setMsg(`Event recording saved (${formatUtc(t0)} … ${formatUtc(t1)}, ${rate}×).`);
     } catch (e) { setMsg(String(e)); setRecording(false); setUiHidden(false); setProg(null); }
   };

@@ -1,4 +1,4 @@
-# ORBITAL LAB — Architecture & Design (Deliverable #27)
+# SPACE LAB — Architecture & Design (Deliverable #27)
 
 เอกสารนี้ครอบคลุม 10 หัวข้อที่ต้องส่งมอบก่อนเริ่ม Phase 1.
 Units: SI ภายในระบบ (m, s, rad, kg) · Time: UTC (ภายในเก็บเป็น epoch ms / Julian Date) · Frames ระบุทุกครั้ง.

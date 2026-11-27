@@ -1,7 +1,7 @@
 import type { ScenarioFile } from './scenario';
 
 /** Local scenario storage in IndexedDB (browser only). All calls reject with a readable error if IndexedDB is unavailable. */
-const DB = 'orbital-lab', STORE = 'scenarios';
+const DB = 'space-lab', STORE = 'scenarios';
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

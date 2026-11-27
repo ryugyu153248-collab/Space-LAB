@@ -55,7 +55,7 @@ export function migrate(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null) throw new Error('Scenario file is not a JSON object');
   const o = { ...(raw as Record<string, unknown>) };
   let v = typeof o.schemaVersion === 'number' ? o.schemaVersion : 0;
-  if (v > SCHEMA_VERSION) throw new Error(`Scenario schema v${v} is newer than this app (v${SCHEMA_VERSION}). Update ORBITAL LAB.`);
+  if (v > SCHEMA_VERSION) throw new Error(`Scenario schema v${v} is newer than this app (v${SCHEMA_VERSION}). Update SPACE LAB.`);
   while (v < SCHEMA_VERSION) {
     switch (v) {
       case 0:

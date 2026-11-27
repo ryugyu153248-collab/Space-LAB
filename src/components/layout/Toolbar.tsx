@@ -33,7 +33,7 @@ export function Toolbar() {
   const quickSave = async () => { try { await localPut(s.snapshot()); s.notify('Scenario saved to this browser'); } catch (e) { s.notify(String(e)); } };
   return (
     <div className="h-9 flex items-center gap-1 px-3 bg-panel border-b border-edge shrink-0 relative z-30">
-      <span className="font-semibold tracking-[0.25em] text-accent text-[13px] mr-2">ORBITAL LAB</span>
+      <span className="font-semibold tracking-[0.25em] text-accent text-[13px] mr-2">SPACE LAB</span>
       <Menu label="File">{() => <>
         <Item onClick={() => setDialog('scenario')}>Scenarios… (new / load / import)</Item><Item onClick={quickSave}>Save to this browser</Item>
         <Item onClick={() => downloadText(serializeScenario(s.snapshot()), `${safeName(scenarioName)}.scenario.json`, 'application/json')}>Export scenario JSON</Item></>}</Menu>

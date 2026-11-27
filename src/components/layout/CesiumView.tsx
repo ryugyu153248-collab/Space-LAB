@@ -26,7 +26,7 @@ export function CesiumView() {
       const sat = s.satellites.find((x) => x.id === s.selectedId);
       const t = clock.time;
       const ev = s.events.find((e) => e.enabled && t >= e.start && t < (e.end ?? e.start + 600_000));
-      return { lines: [formatUtc(t), ...(sat ? [sat.name] : []), ...(ev ? [`EVENT: ${ev.name}`] : []), `ORBITAL LAB · ${s.scenarioName}`] };
+      return { lines: [formatUtc(t), ...(sat ? [sat.name] : []), ...(ev ? [`EVENT: ${ev.name}`] : []), `SPACE LAB · ${s.scenarioName}`] };
     });
     sceneRef.current = scene;
     sceneRegistry.scene = scene;
