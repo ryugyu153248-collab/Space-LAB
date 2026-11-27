@@ -16,5 +16,5 @@ export interface StyleSettings {
 
 export const DEFAULT_STYLE: StyleSettings = {
   orbitWidth: 2, orbitOpacity: 0.95, trackWidth: 2, trackOpacity: 0.9, trackColor: '#facc15', linkColor: '#22c55e',
-  footprintOpacity: 0.28, heatmapOpacity: 0.65, cloudOpacity: 0.45, shadowOpacity: 0.28, atmosphere: 1, exaggeration: 1,
+  footprintOpacity: 0.28, heatmapOpacity: 0.65, cloudOpacity: 0.4, shadowOpacity: 0.28, atmosphere: 1, exaggeration: 1,
 };

@@ -30,7 +30,7 @@ export function ModelViewOverlay() {
         <div className="text-[10px] text-slate-500 mt-2 flex gap-3"><span><b className="text-red-400">━</b> X along-track</span><span><b className="text-green-400">━</b> Y array axis</span><span><b className="text-blue-400">━</b> Z nadir</span></div>
         <div className="text-[10px] text-slate-600 mt-1">Drag = rotate · wheel = zoom · right-drag = pan</div>
       </div>
-      <button className="btn absolute right-4 top-4 pointer-events-auto" onClick={() => setModelView(false)}>✕ Exit model view</button>
+      <button className="btn absolute right-4 top-4 pointer-events-auto" onClick={() => setModelView(false)}>⊞ Open workspace (Esc)</button>
       <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex items-center gap-2 bg-panel/75 backdrop-blur border border-edge rounded-lg px-3 py-2 pointer-events-auto">
         <button className="btn" onClick={() => step(-1)} disabled={list.length < 2}>◀ Prev</button>
         <button className={`btn ${c.playing ? 'btn-on' : ''}`} onClick={() => (c.playing ? clock.pause() : (clock.setReverse(false), clock.play()))}>{c.playing ? '❚❚ Pause' : '▶ Play'}</button>

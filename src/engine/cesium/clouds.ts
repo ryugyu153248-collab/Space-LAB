@@ -31,7 +31,7 @@ export function cloudDensity(lat: number, lon: number, seed = 7): number {
 /** RGBA (white, alpha = cloud cover) equirectangular image, w × h, row 0 = north. */
 export function generateCloudData(w: number, h: number, seed = 7): Uint8ClampedArray<ArrayBuffer> {
   const out = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
-  const lo = 0.5, hi = 0.64; // soft threshold → ≈ 45 % cover
+  const lo = 0.56, hi = 0.7; // soft threshold → ≈ 30 % cover
   for (let j = 0; j < h; j++) {
     const lat = (0.5 - (j + 0.5) / h) * Math.PI;
     for (let i = 0; i < w; i++) {
@@ -39,7 +39,7 @@ export function generateCloudData(w: number, h: number, seed = 7): Uint8ClampedA
       const t = Math.min(1, Math.max(0, (cloudDensity(lat, lon, seed) - lo) / (hi - lo)));
       const a = t * t * (3 - 2 * t);
       const k = 4 * (j * w + i);
-      out[k] = 255; out[k + 1] = 255; out[k + 2] = 255; out[k + 3] = Math.round(a * 235);
+      out[k] = 255; out[k + 1] = 255; out[k + 2] = 255; out[k + 3] = Math.round(a * 200);
     }
   }
   return out;

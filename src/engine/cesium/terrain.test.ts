@@ -15,11 +15,11 @@ describe('terrain (Terrarium)', () => {
 
 describe('procedural clouds', () => {
   const w = 256, h = 128, d = generateCloudData(w, h, 7);
-  it('is deterministic, alpha-only varying, 25–65 % mean cover', () => {
+  it("is deterministic, alpha-only varying, 10–50 % mean opacity", () => {
     expect(Array.from(generateCloudData(32, 16, 7)).slice(0, 64)).toEqual(Array.from(generateCloudData(32, 16, 7)).slice(0, 64));
     let sum = 0; for (let i = 3; i < d.length; i += 4) sum += d[i] / 255;
     const cover = sum / (w * h);
-    expect(cover).toBeGreaterThan(0.25); expect(cover).toBeLessThan(0.65);
+    expect(cover).toBeGreaterThan(0.1); expect(cover).toBeLessThan(0.5);
     expect(d[0]).toBe(255);
   });
   it('is seamless across the date line (density at lon=±π equal) and well defined at the poles', () => {

@@ -117,8 +117,8 @@ export const useStore = create<State>((set, get) => ({
   scenarioId: demo.id, scenarioName: demo.name, baseSatellites: demo.satellites, events: demo.events,
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
-  layers: { ...DEFAULT_LAYERS } as Layers, clock: clock.snapshot(), cameraMode: 'earth', views: [],
-  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
+  layers: { ...DEFAULT_LAYERS } as Layers, clock: clock.snapshot(), cameraMode: 'closeup', views: [],
+  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: true, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: [demo.satellites[0].id, demo.satellites[1].id],
   presentation: false, uiHidden: false, toast: null,
 
@@ -199,7 +199,7 @@ export const useStore = create<State>((set, get) => ({
     set({
       scenarioId: f.id, scenarioName: f.name, baseSatellites: f.satellites, events: f.events, ...d, stations: f.stations,
       selectedId: f.satellites[0]?.id ?? null, secondId: f.satellites[1]?.id ?? null, selectedStationId: f.stations[0]?.id ?? null,
-      layers: { ...DEFAULT_LAYERS, ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: 'earth',
+      layers: { ...DEFAULT_LAYERS, ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: get().modelView ? 'closeup' : 'earth',
       settings: { ...DEFAULT_SETTINGS, ...f.settings }, style: { ...DEFAULT_STYLE, ...(f.style ?? {}) }, heatmap: null, target: null,
       conjunctionPair: f.satellites.length > 1 ? [f.satellites[0].id, f.satellites[1].id] : null, dialog: null,
     });

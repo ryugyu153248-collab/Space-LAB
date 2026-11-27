@@ -593,6 +593,11 @@ export class CesiumScene {
       x.entity.show = vis;
       if (vis) { const e = eciToEcef(x.r, t); (x.entity.position as ConstantPositionProperty).setValue(new Cartesian3(e[0], e[1], e[2])); }
     }
+    // procedural clouds are only credible from far away: fade them out when the camera is within a few thousand km of the surface
+    if (this.cloudLayer) {
+      const hgt = v.camera.positionCartographic.height, f = Math.min(1, Math.max(0, (hgt - 2.0e6) / 5.0e6));
+      this.cloudLayer.alpha = this.style.cloudOpacity * f * f * (3 - 2 * f);
+    }
     this.cameraFrame(t);
     this.hooks.onFrame(t);
     v.render();
