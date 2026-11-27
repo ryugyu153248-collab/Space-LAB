@@ -4,3 +4,4 @@ public/cesium
 *.tsbuildinfo
 .env*
 !.env.example
+*.zip
