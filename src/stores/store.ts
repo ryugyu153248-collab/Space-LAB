@@ -10,14 +10,15 @@ import { SCHEMA_VERSION, type CameraView, type ScenarioFile } from '@/engine/dat
 import { DEFAULT_LAYERS, DEFAULT_SETTINGS, buildCollisionDemo } from '@/engine/data/demoFile';
 import type { CoverageResult } from '@/engine/analysis/coverage';
 import type { CameraMode } from '@/engine/cesium/CesiumScene';
+import { DEFAULT_STYLE, type StyleSettings } from '@/engine/cesium/style';
 
-export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights', boolean>;
+export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights' | 'terrain' | 'clouds' | 'sun' | 'moon' | 'stars' | 'eclipseShadow' | 'velocityVector', boolean>;
 export type { CameraMode };
-export type BottomTab = 'timeline' | 'orbit' | 'access' | 'telemetry';
+export type BottomTab = 'timeline' | 'orbit' | 'access';
 export type MapMode = '3d' | 'split' | '2d';
-export type RightTab = 'info' | 'maneuver' | 'conjunction' | 'events' | 'coverage' | 'report';
+export type RightTab = 'info' | 'telemetry' | 'maneuver' | 'conjunction' | 'events' | 'coverage' | 'report';
 export type AnyTab = BottomTab | RightTab;
-const RIGHT_TABS: RightTab[] = ['info', 'maneuver', 'conjunction', 'events', 'coverage', 'report'];
+const RIGHT_TABS: RightTab[] = ['info', 'telemetry', 'maneuver', 'conjunction', 'events', 'coverage', 'report'];
 export type Dialog = null | 'import' | 'station' | 'scenario' | 'export' | 'capture';
 
 export interface Settings { stormLevel: number; covPrimary: number; covSecondary: number; hbr: number; useCovariance: boolean }
@@ -44,6 +45,7 @@ interface State {
   bottomTab: BottomTab;
   rightTab: RightTab;
   mapMode: MapMode;
+  style: StyleSettings;
   hidden: Record<string, boolean>;
   sizes: { left: number; right: number; bottom: number; map: number };
   modelView: boolean;
@@ -51,7 +53,7 @@ interface State {
   editingEvent: string | null;
   settings: Settings;
   heatmap: Heatmap | null;
-  target: { lat: number; lon: number } | null;
+  target: { lat: number; lon: number; radiusKm?: number } | null;
   pickMode: boolean;
   conjunctionPair: [string, string] | null;
   presentation: boolean;
@@ -80,6 +82,7 @@ interface State {
   setBottomTab: (t: AnyTab) => void;
   setRightTab: (t: RightTab) => void;
   setMapMode: (m: MapMode) => void;
+  setStyle: (p: Partial<StyleSettings>) => void;
   toggleHidden: (id: string) => void;
   setSize: (k: 'left' | 'right' | 'bottom' | 'map', v: number) => void;
   setModelView: (b: boolean) => void;
@@ -87,7 +90,7 @@ interface State {
   setEditingEvent: (id: string | null) => void;
   setSettings: (p: Partial<Settings>) => void;
   setHeatmap: (h: Heatmap | null) => void;
-  setTarget: (t: { lat: number; lon: number } | null) => void;
+  setTarget: (t: { lat: number; lon: number; radiusKm?: number } | null) => void;
   setPickMode: (b: boolean) => void;
   setConjunctionPair: (p: [string, string] | null) => void;
   setPresentation: (b: boolean) => void;
@@ -115,7 +118,7 @@ export const useStore = create<State>((set, get) => ({
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
   layers: { ...DEFAULT_LAYERS } as Layers, clock: clock.snapshot(), cameraMode: 'earth', views: [],
-  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: 'split', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
+  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: [demo.satellites[0].id, demo.satellites[1].id],
   presentation: false, uiHidden: false, toast: null,
 
@@ -172,6 +175,7 @@ export const useStore = create<State>((set, get) => ({
     ? set({ rightTab: t as RightTab, panels: { ...get().panels, right: true } })
     : set({ bottomTab: t as BottomTab, panels: { ...get().panels, bottom: true } }),
   setMapMode: (mapMode) => set({ mapMode }),
+  setStyle: (p) => set((s) => ({ style: { ...s.style, ...p } })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
   setRightTab: (rightTab) => set({ rightTab, panels: { ...get().panels, right: true } }),
   setSize: (k, v) => set((s) => ({ sizes: { ...s.sizes, [k]: Math.round(Math.min(k === 'bottom' ? 560 : 900, Math.max(k === 'bottom' ? 120 : 200, v))) } })),
@@ -196,7 +200,7 @@ export const useStore = create<State>((set, get) => ({
       scenarioId: f.id, scenarioName: f.name, baseSatellites: f.satellites, events: f.events, ...d, stations: f.stations,
       selectedId: f.satellites[0]?.id ?? null, secondId: f.satellites[1]?.id ?? null, selectedStationId: f.stations[0]?.id ?? null,
       layers: { ...DEFAULT_LAYERS, ...f.layers } as Layers, views: f.camera.views as CameraView[], cameraMode: 'earth',
-      settings: { ...DEFAULT_SETTINGS, ...f.settings }, heatmap: null, target: null,
+      settings: { ...DEFAULT_SETTINGS, ...f.settings }, style: { ...DEFAULT_STYLE, ...(f.style ?? {}) }, heatmap: null, target: null,
       conjunctionPair: f.satellites.length > 1 ? [f.satellites[0].id, f.satellites[1].id] : null, dialog: null,
     });
   },
@@ -205,7 +209,7 @@ export const useStore = create<State>((set, get) => ({
     return {
       schemaVersion: SCHEMA_VERSION, id: s.scenarioId, name: s.scenarioName, savedAt: new Date().toISOString(),
       clock: { start: c.start, end: c.end, time: c.time, rate: c.rate }, satellites: s.baseSatellites, stations: s.stations, events: s.events,
-      camera: { mode: s.cameraMode, views: s.views }, layers: s.layers, settings: s.settings,
+      camera: { mode: s.cameraMode, views: s.views }, layers: s.layers, settings: s.settings, style: s.style,
     };
   },
 }));

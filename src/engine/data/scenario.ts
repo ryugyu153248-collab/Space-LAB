@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { GroundStation, Satellite } from '@/types';
 import type { SimEvent } from '../events/EventTypes';
+import type { StyleSettings } from '../cesium/style';
 
 export const SCHEMA_VERSION = 1;
 
@@ -19,6 +20,8 @@ export interface ScenarioFile {
   camera: { mode: string; views: CameraView[] };
   layers: Record<string, boolean>;
   settings: { stormLevel: number; covPrimary: number; covSecondary: number; hbr: number; useCovariance: boolean };
+  /** globe appearance (optional; absent in older files) */
+  style?: Partial<StyleSettings>;
 }
 
 const Num = z.number().finite();
@@ -45,6 +48,7 @@ export const ScenarioSchema = z.object({
   camera: z.object({ mode: z.string(), views: z.array(z.any()) }),
   layers: z.record(z.string(), z.boolean()),
   settings: z.object({ stormLevel: Num, covPrimary: Num, covSecondary: Num, hbr: Num, useCovariance: z.boolean() }),
+  style: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
 });
 
 /**

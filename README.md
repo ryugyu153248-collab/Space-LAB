@@ -26,6 +26,18 @@ Timeline view (sunlight/umbra, access, burns, events, TCA bars with draggable cu
 full-screen Model view. Imagery: Esri World Imagery (keyless, online) over the offline base; set `VITE_CESIUM_ION_TOKEN` to use Cesium imagery + terrain instead.
 Note: Esri World Imagery is subject to Esri's terms of use/attribution — switch it off (Layers) or use a Cesium Ion token for commercial deployments.
 
+## Earth rendering (CesiumJS only — no second globe renderer)
+| Element | Source / method | Needs network? |
+|---|---|---|
+| Surface imagery | Esri World Imagery (keyless) over offline NaturalEarthII; Cesium World Imagery with `VITE_CESIUM_ION_TOKEN` | online (offline fallback bundled) |
+| Terrain | Cesium World Terrain with token; otherwise AWS Terrain Tiles (Terrarium) as a Cesium heightmap provider, LOD/streaming by Cesium, exaggeration slider | online |
+| Atmosphere / limb / terminator | Cesium sky + ground atmosphere (per-fragment, HDR), dynamic sun lighting from the simulation clock | no |
+| Night lights | NASA GIBS VIIRS Black Marble (night side only) | online |
+| Clouds | **procedural** (seamless fractal noise, offline) — *not* real weather | no |
+| Sun, Moon, stars, Earth shadow | Cesium sun/moon/skybox; umbra cone from the same low-precision Sun used for eclipses | no |
+Every layer is toggleable; line width/opacity/colour, cloud/shadow/heatmap opacity, atmosphere strength and terrain exaggeration are adjustable (Layers → Style).
+Cameras: Earth overview, Low-Earth-orbit view, Satellite follow, Model close-up, Orbit, Ground-station, Relative, Dual, Global-coverage, Free (eased transitions).
+
 ## What is implemented
 | Phase | Features |
 |---|---|

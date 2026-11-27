@@ -49,4 +49,13 @@ describe('target windows', () => {
   });
 });
 
+describe('target area', () => {
+  it('a larger target radius never shrinks the set of observation windows (monotonic) and strictly extends the total time', () => {
+    const s = mk(51.6);
+    const total = (r: number) => computeTargetWindows(s, { lat: 10 * DEG, lon: 30 * DEG, alt: 0 }, 15 * DEG, T0, T0 + 86_400_000, 10, r).reduce((a, w) => a + w.duration, 0);
+    const t0 = total(0), t1 = total(150_000), t2 = total(400_000);
+    expect(t1).toBeGreaterThanOrEqual(t0); expect(t2).toBeGreaterThan(t1);
+  });
+});
+
 function nLatIndex(lat: number, g: number): number { return Math.floor((lat + 90) / g); }

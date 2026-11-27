@@ -9,7 +9,6 @@ import { Map2D } from '@/components/layout/Map2D';
 import { TimelineView } from '@/components/timeline/TimelineView';
 import { OrbitCharts } from '@/components/charts/OrbitCharts';
 import { AccessPanel } from '@/components/panels/AccessPanel';
-import { TelemetryPanel } from '@/components/panels/TelemetryPanel';
 import { StationDialog } from '@/components/dialogs/StationDialog';
 import { ImportDialog } from '@/components/dialogs/ImportDialog';
 import { ScenarioDialog } from '@/components/dialogs/ScenarioDialog';
@@ -23,7 +22,7 @@ import { ecefToGeodetic, eciToEcef } from '@/engine/orbital/frames';
 // Cesium is large: load it as its own chunk so the shell paints first.
 const CesiumView = lazy(() => import('@/components/layout/CesiumView').then((m) => ({ default: m.CesiumView })));
 
-const BOTTOM_TABS: [BottomTab, string][] = [['timeline', 'Timeline view'], ['orbit', 'Orbit charts'], ['access', 'Ground access'], ['telemetry', 'Telemetry (sim.)']];
+const BOTTOM_TABS: [BottomTab, string][] = [['timeline', 'Timeline view'], ['orbit', 'Orbit charts'], ['access', 'Ground access']];
 
 function PresentationOverlay() {
   const { satellites, selectedId, events, setCameraMode } = useStore();
@@ -80,7 +79,7 @@ export function App() {
                     {BOTTOM_TABS.map(([k, l]) => <button key={k} className={`px-3 py-0.5 text-[11px] border-b-2 whitespace-nowrap ${bottomTab === k ? 'text-accent border-accent' : 'text-slate-500 border-transparent'}`} onClick={() => setBottomTab(k)}>{l}</button>)}
                   </div>
                   <div style={{ height: sizes.bottom }} className="overflow-hidden">
-                    {bottomTab === 'timeline' && <TimelineView />}{bottomTab === 'orbit' && <OrbitCharts />}{bottomTab === 'access' && <AccessPanel />}{bottomTab === 'telemetry' && <TelemetryPanel />}
+                    {bottomTab === 'timeline' && <TimelineView />}{bottomTab === 'orbit' && <OrbitCharts />}{bottomTab === 'access' && <AccessPanel />}
                   </div>
                 </>
               )}

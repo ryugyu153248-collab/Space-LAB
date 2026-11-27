@@ -13,7 +13,7 @@ export function TelemetryPanel() {
   if (!sat || !res) return <div className="p-3 text-slate-500">Select a satellite.</div>;
   const cur = sampleAt(res, clock.time);
   const chart = (key: string, title: string, color: string, fmt: (v: number) => string, dom: [number | string, number | string] = ['auto', 'auto']) => (
-    <div className="flex-1 min-w-0 h-full flex flex-col">
+    <div className="min-w-0 h-40 flex flex-col">
       <div className="px-2 text-[10px] uppercase tracking-widest text-slate-500">{title}</div>
       <div className="flex-1 min-h-0"><ResponsiveContainer width="100%" height="100%"><LineChart data={res.samples} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}><CartesianGrid stroke="#1e293b" />
         <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(v).toISOString().slice(5, 13)} stroke="#64748b" fontSize={10} />
@@ -23,8 +23,8 @@ export function TelemetryPanel() {
   );
   const item = (l: string, v: string, bad = false) => <div className="flex justify-between gap-3"><span className="text-slate-400">{l}</span><span className={`num ${bad ? 'text-red-400' : 'text-slate-100'}`}>{v}</span></div>;
   return (
-    <div className="flex h-full overflow-hidden text-[11px]">
-      <div className="w-[24%] min-w-[220px] overflow-y-auto border-r border-edge p-2 space-y-1">
+    <div className="text-[11px]">
+      <div className="p-2 space-y-1 border-b border-edge">
         <div className="flex items-center gap-2"><span className="text-slate-100 font-semibold truncate">{sat.name}</span><Sim /></div>
         {cur && (<>
           {item('Battery', `${cur.batteryPct.toFixed(1)} % · ${cur.batteryV.toFixed(1)} V`, cur.batteryPct < 20)}
@@ -42,12 +42,12 @@ export function TelemetryPanel() {
         <label className="flex items-center gap-1"><input type="checkbox" checked={layers.saa} onChange={() => toggleLayer('saa')} />Show SAA zone on globe</label>
         <div className="text-slate-500">All telemetry, SAA and radiation values are SIMULATED from simple models (assumptions in <code>telemetry/model.ts</code>); no real telemetry is used.</div>
       </div>
-      <div className="w-[16%] min-w-[180px] overflow-y-auto border-r border-edge">
+      <div className="border-b border-edge max-h-32 overflow-y-auto">
         <div className="px-2 py-1 text-slate-500 uppercase tracking-widest text-[10px] sticky top-0 bg-panel">Event log / warnings</div>
         {res.warnings.map((w, i) => <div key={i} className="px-2 py-0.5 border-b border-edge/40"><Chip level={w.level === 'critical' ? 'red' : 'yellow'}>{w.level}</Chip> <span className="num text-slate-400">{formatUtc(w.t).slice(5)}</span> {w.message}</div>)}
         {!res.warnings.length && <div className="px-2 py-1 text-slate-600">No threshold crossings.</div>}
       </div>
-      <div className="flex-1 min-w-0 flex">{chart('batteryPct', 'Battery [%]', '#22c55e', (v) => v.toFixed(0), [0, 100])}{chart('solarW', 'Solar power [W]', '#facc15', (v) => v.toFixed(0))}{chart('tempK', 'Temperature [K]', '#fb7185', (v) => v.toFixed(0))}{chart('fuelKg', 'Fuel [kg]', '#38bdf8', (v) => v.toFixed(1))}</div>
+      <div className="grid grid-cols-1">{chart('batteryPct', 'Battery [%]', '#22c55e', (v) => v.toFixed(0), [0, 100])}{chart('solarW', 'Solar power [W]', '#facc15', (v) => v.toFixed(0))}{chart('tempK', 'Temperature [K]', '#fb7185', (v) => v.toFixed(0))}{chart('fuelKg', 'Fuel [kg]', '#38bdf8', (v) => v.toFixed(1))}</div>
     </div>
   );
 }

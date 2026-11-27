@@ -126,9 +126,11 @@ export function offNadir(sat: Satellite, target: { lat: number; lon: number; alt
 
 /** Windows in which a ground target lies inside the sensor cone (nadir-pointing; half-angle α). */
 export function computeTargetWindows(
-  sat: Satellite, target: { lat: number; lon: number; alt: number }, alpha: number, t0: number, t1: number, stepSec = 20,
+  sat: Satellite, target: { lat: number; lon: number; alt: number }, alpha: number, t0: number, t1: number, stepSec = 20, radiusM = 0,
 ): TargetWindow[] {
-  const inside = (t: number) => { const o = offNadir(sat, target, t); return !!o && o.off <= alpha; };
+  // Target AREA (circle of radius radiusM): observed when the area overlaps the footprint — conservative: off-nadir to the centre
+  // minus the area's angular size seen from the satellite (atan(r/range)) must be within the sensor half-angle. radiusM = 0 → point target.
+  const inside = (t: number) => { const o = offNadir(sat, target, t); return !!o && o.off - (radiusM > 0 ? Math.atan(radiusM / o.range) : 0) <= alpha; };
   return intervalsWhere(inside, t0, t1, stepSec * 1000).map((iv) => {
     let best = Infinity, tMin = iv.start, rng = 0;
     for (let k = 0; k <= 40; k++) {

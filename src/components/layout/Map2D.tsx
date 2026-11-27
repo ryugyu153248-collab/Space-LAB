@@ -207,7 +207,7 @@ export function Map2D() {
           if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
           if (d.moved) { const r = ref.current!.getBoundingClientRect(), v = view.current, k = Math.min(r.width / 360, r.height / 180) * v.zoom; v.cLon -= dx / k; v.cLat += dy / k; d.x = e.clientX; d.y = e.clientY; }
         }}
-        onPointerUp={(e) => { const d = drag.current; drag.current = null; if (d && !d.moved) { const [lo, la] = toLonLat(e); if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) { const s = useStore.getState(); s.setTarget({ lat: la, lon: lo }); s.notify(`Target set: ${la.toFixed(2)}°, ${lo.toFixed(2)}°`); } } }}
+        onPointerUp={(e) => { const d = drag.current; drag.current = null; if (d && !d.moved) { const [lo, la] = toLonLat(e); if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) { const s = useStore.getState(); s.setTarget({ lat: la, lon: lo, radiusKm: s.target?.radiusKm }); s.notify(`Target set: ${la.toFixed(2)}°, ${lo.toFixed(2)}°`); } } }}
         onDoubleClick={() => { view.current = { cLon: 0, cLat: 0, zoom: 1 }; }} />
       <div className="absolute left-2 top-2 text-[10px] text-slate-300 bg-black/50 rounded px-2 py-0.5 pointer-events-none">2D Map · wheel zoom · drag pan · click = target · dbl-click reset</div>
       <div ref={hover} className="absolute left-2 bottom-2 num text-[10px] text-slate-200 bg-black/50 rounded px-2 py-0.5 pointer-events-none">—</div>

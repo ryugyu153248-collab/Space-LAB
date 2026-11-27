@@ -1,14 +1,14 @@
 import {
   Cartesian2, Cartesian3, CallbackProperty, Color, ColorMaterialProperty, ConstantPositionProperty, Entity, HeightReference,
-  ImageryLayer, Ion, Matrix4, ModelGraphics, ConstantProperty, JulianDate, LabelStyle, PolygonHierarchy, PolylineDashMaterialProperty, Rectangle, ScreenSpaceEventHandler,
-  ScreenSpaceEventType, SingleTileImageryProvider, Terrain, TileMapServiceImageryProvider, VerticalOrigin, Viewer, buildModuleUrl,
-  createWorldImageryAsync, ArcGisMapServerImageryProvider, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
+  ImageryLayer, Ion, Matrix4, type TerrainProvider, ModelGraphics, ConstantProperty, JulianDate, LabelStyle, PolygonHierarchy, PolylineDashMaterialProperty, Rectangle, ScreenSpaceEventHandler,
+  ScreenSpaceEventType, SingleTileImageryProvider, TileMapServiceImageryProvider, VerticalOrigin, Viewer, buildModuleUrl,
+  createWorldImageryAsync, createWorldTerrainAsync, EllipsoidTerrainProvider, ArcGisMapServerImageryProvider, Math as CesiumMath, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
 } from 'cesium';
 import type { GroundStation, Maneuver, Satellite, Vec3 } from '@/types';
 import type { SimulationClock } from '../simulation/SimulationClock';
 import type { Layers } from '@/stores/store';
 import { propagateSatellite, propagateBaseline, propsOf } from '../orbital/propagate';
-import { eciToEcef, geodeticToEcef } from '../orbital/frames';
+import { ecefToGeodetic, eciToEcef, geodeticToEcef } from '../orbital/frames';
 import { lookAngles, visibilityCentralAngle } from '../orbital/lookangles';
 import { DEG, R_EARTH } from '../orbital/constants';
 import { derivedElements, rvToElements } from '../orbital/elements';
@@ -20,6 +20,9 @@ import { modelKindFor, modelUrl, type ModelKind } from './models/templates';
 import { sunPositionEci } from '../orbital/sun';
 import { saaOutline } from '../orbital/environment';
 import type { SimEvent } from '../events/EventTypes';
+import { createTerrariumProvider } from './terrain';
+import { cloudCanvas } from './clouds';
+import { DEFAULT_STYLE, type StyleSettings } from './style';
 
 /**
  * Visualization only. All positions come from the Orbital Engine (propagateSatellite); Cesium never computes physics.
@@ -40,12 +43,18 @@ interface Sat3D {
   arrays: { orbitPast: Cartesian3[]; orbitFuture: Cartesian3[]; gtPast: Cartesian3[]; gtFuture: Cartesian3[]; nadir: Cartesian3[]; ghost: Cartesian3[] };
   entities: { orbitPast?: Entity; orbitFuture?: Entity; gtPast?: Entity; gtFuture?: Entity; nadirLine?: Entity; nadirPoint?: Entity; ghost?: Entity };
   cache: PathCache | null;
+  /** reused objects — no per-frame Cartesian3 allocation for the position / nadir point */
+  cart: Cartesian3;
+  surf: Cartesian3;
+  foot?: Entity;
+  footPts: Cartesian3[];
+  pools: { past: Cartesian3[]; fut: Cartesian3[]; gtp: Cartesian3[]; gtf: Cartesian3[]; ghost: Cartesian3[] };
   links: Map<string, { entity: Entity; arr: Cartesian3[] }>;
 }
 
 interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartesian3; coneRadius: { v: number } }
 
-export type CameraMode = 'earth' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual';
+export type CameraMode = 'earth' | 'leo' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual' | 'coverage';
 export interface CameraContext { stationId: string | null; secondId: string | null }
 export interface SavedView { name: string; position: [number, number, number]; direction: [number, number, number]; up: [number, number, number] }
 
@@ -69,6 +78,13 @@ export class CesiumScene {
   private hidden = new Set<string>();
   private hires: ImageryLayer | null = null;
   private lights: ImageryLayer | null = null;
+  private cloudLayer: ImageryLayer | null = null;
+  private terrain: TerrainProvider | null = null;
+  private flat = new EllipsoidTerrainProvider();
+  private style: StyleSettings = { ...DEFAULT_STYLE };
+  private shadow: Entity;
+  private shadowState = { pos: new Cartesian3(), q: new Quaternion() };
+  private camBlendStart = 0;
   private camMode: CameraMode = 'earth';
   private camCtx: CameraContext = { stationId: null, secondId: null };
   private pickMode = false;
@@ -78,7 +94,7 @@ export class CesiumScene {
   private conjEntity: { entity: Entity; arr: Cartesian3[]; ids: [string, string] } | null = null;
   private saa: Entity;
   // selected-satellite decorations
-  private fx: { sunVec: Entity; sunArr: Cartesian3[]; axLabels: Entity[]; burnVec: Entity; plume: Entity; axes: Entity[]; cone: Entity[]; foot: Entity; footPts: Cartesian3[]; burnArr: Cartesian3[]; plumeArr: Cartesian3[]; axArr: Cartesian3[][]; coneArr: Cartesian3[][] };
+  private fx: { sunVec: Entity; sunArr: Cartesian3[]; axLabels: Entity[]; velVec: Entity; velArr: Cartesian3[]; burnVec: Entity; plume: Entity; axes: Entity[]; cone: Entity[]; foot: Entity; footPts: Cartesian3[]; burnArr: Cartesian3[]; plumeArr: Cartesian3[]; axArr: Cartesian3[][]; coneArr: Cartesian3[][] };
   private overlayProvider: (() => Overlay) | null = null;
   private composite: HTMLCanvasElement | null = null;
   private shotResolve: ((b: Blob) => void) | null = null;
@@ -94,7 +110,7 @@ export class CesiumScene {
     this.viewer = new Viewer(container, {
       animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
       navigationHelpButton: false, fullscreenButton: false, infoBox: false, selectionIndicator: false, baseLayer: false,
-      requestRenderMode: false, terrain: token ? Terrain.fromWorldTerrain() : undefined,
+      requestRenderMode: false,
     });
     const v = this.viewer;
     v.useDefaultRenderLoop = false;
@@ -115,14 +131,29 @@ export class CesiumScene {
     }
 
     const scene = v.scene;
+    // Terrain: Cesium World Terrain with an Ion token, otherwise keyless Terrarium (AWS) heightmaps; flat ellipsoid when switched off / unreachable.
+    if (token) createWorldTerrainAsync().then((tp) => { this.terrain = tp; this.applyTerrain(); }).catch(() => { this.terrain = createTerrariumProvider(); this.applyTerrain(); });
+    else { this.terrain = createTerrariumProvider(); this.applyTerrain(); }
+    // Procedural cloud layer (offline; generated once, lazily so the first frame is not delayed)
+    setTimeout(() => {
+      if (this.disposed) return;
+      const url = cloudCanvas(1024, 512).toDataURL('image/png');
+      this.cloudLayer = ImageryLayer.fromProviderAsync(SingleTileImageryProvider.fromUrl(url, { rectangle: Rectangle.MAX_VALUE }));
+      this.cloudLayer.alpha = this.style.cloudOpacity; this.cloudLayer.nightAlpha = 0.25;
+      v.imageryLayers.add(this.cloudLayer);
+      if (this.layers) this.setLayers(this.layers);
+    }, 50);
     scene.globe.enableLighting = true;
     scene.globe.showGroundAtmosphere = true;
     scene.globe.baseColor = Color.fromCssColorString('#0a1a2f');
-    scene.highDynamicRange = false;
+    scene.highDynamicRange = true;
+    if (scene.skyAtmosphere) { scene.skyAtmosphere.perFragmentAtmosphere = true; scene.skyAtmosphere.atmosphereLightIntensity = 60; }
     scene.fog.enabled = false;
     scene.globe.depthTestAgainstTerrain = false;
     scene.globe.maximumScreenSpaceError = 1.2;
     scene.globe.atmosphereLightIntensity = 14;
+    scene.globe.dynamicAtmosphereLighting = true;
+    scene.globe.dynamicAtmosphereLightingFromSun = true;
     scene.postProcessStages.fxaa.enabled = true;
     const bloom = scene.postProcessStages.bloom;
     bloom.enabled = true; bloom.uniforms.brightness = -0.35; bloom.uniforms.contrast = 110; bloom.uniforms.glowOnly = false;
@@ -142,13 +173,20 @@ export class CesiumScene {
     const axArr = [0, 1, 2].map(() => [Cartesian3.ZERO, Cartesian3.ZERO]);
     const coneArr = [0, 1, 2, 3].map(() => [Cartesian3.ZERO, Cartesian3.ZERO]);
     const footPts: Cartesian3[] = [];
+    // Earth umbra cone (translucent), pointing away from the Sun; length 6e7 m (umbra is 1.4e9 m long, truncated for rendering).
+    const SH_L = 6e7, SH_SLOPE = (6.957e8 - R_EARTH) / 1.496e11;
+    this.shadow = v.entities.add({
+      position: new CallbackProperty(() => this.shadowState.pos, false) as never, orientation: new CallbackProperty(() => this.shadowState.q, false) as never,
+      cylinder: { length: SH_L, bottomRadius: R_EARTH, topRadius: R_EARTH - SH_L * SH_SLOPE, material: Color.BLACK.withAlpha(this.style.shadowOpacity), outline: false, numberOfVerticalLines: 0 }, show: false,
+    });
+    const velArr: Cartesian3[] = [Cartesian3.ZERO, Cartesian3.ZERO];
     const sunArr: Cartesian3[] = [Cartesian3.ZERO, Cartesian3.ZERO];
     const tag = (text: string, color: Color, get: () => Cartesian3) => v.entities.add({
       position: new CallbackProperty(get, false) as never,
       label: { text, font: '12px ui-monospace, monospace', fillColor: color, style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, outlineColor: Color.BLACK, pixelOffset: new Cartesian2(0, -10), disableDepthTestDistance: 1e9 }, show: false,
     });
     this.fx = {
-      sunArr, sunVec: line(Color.GOLD, 2, () => sunArr), axLabels: [tag('Body X', Color.RED, () => axArr[0][1]), tag('Body Y', Color.LIME, () => axArr[1][1]), tag('Body Z (nadir)', Color.DODGERBLUE, () => axArr[2][1]), tag('Sun', Color.GOLD, () => sunArr[1])],
+      velArr, velVec: line(Color.CYAN, 3, () => velArr), sunArr, sunVec: line(Color.GOLD, 2, () => sunArr), axLabels: [tag('Body X', Color.RED, () => axArr[0][1]), tag('Body Y', Color.LIME, () => axArr[1][1]), tag('Body Z (nadir)', Color.DODGERBLUE, () => axArr[2][1]), tag('Sun', Color.GOLD, () => sunArr[1])],
       burnArr, plumeArr, axArr, coneArr, footPts,
       burnVec: line(Color.YELLOW, 3, () => burnArr), plume: line(Color.ORANGE, 9, () => plumeArr),
       axes: [Color.RED, Color.LIME, Color.DODGERBLUE].map((c, i) => line(c, 3, () => axArr[i])),
@@ -225,10 +263,47 @@ export class CesiumScene {
     }
     for (const g of this.stns.values()) { const on = l.stations && !this.hidden.has(g.stn.id); g.entity.show = on; g.cone.show = on && l.visibilityCones; }
     this.saa.show = l.saa;
+    if (scene.sun) scene.sun.show = l.sun;
+    if (scene.moon) scene.moon.show = l.moon;
+    if (scene.skyBox) scene.skyBox.show = l.stars;
+    this.shadow.show = l.eclipseShadow;
+    if (this.cloudLayer) this.cloudLayer.show = l.clouds;
+    if (this.terrain) this.applyTerrain();
     if (this.hires) this.hires.show = l.hiresImagery;
     if (this.lights) this.lights.show = l.cityLights;
-    if (this.heatLayer) this.heatLayer.show = l.coverage;
+    if (this.heatLayer) { this.heatLayer.show = l.coverage; this.heatLayer.alpha = this.style.heatmapOpacity; }
     for (const x of this.effects) x.entity.show = l.eventEffects;
+  }
+
+  private applyTerrain(): void {
+    const want = this.layers?.terrain ?? true;
+    const prov = want && this.terrain ? this.terrain : this.flat;
+    if (this.viewer.scene.terrainProvider !== prov) this.viewer.scene.terrainProvider = prov;
+  }
+
+  /** Appearance settings (line widths / opacity / colours, atmosphere, terrain exaggeration). */
+  setStyle(st: StyleSettings): void {
+    this.style = st;
+    const sc = this.viewer.scene;
+    sc.verticalExaggeration = st.exaggeration;
+    sc.globe.atmosphereLightIntensity = 14 * st.atmosphere;
+    if (sc.skyAtmosphere) sc.skyAtmosphere.atmosphereLightIntensity = 60 * st.atmosphere;
+    if (this.cloudLayer) this.cloudLayer.alpha = st.cloudOpacity;
+    if (this.heatLayer) this.heatLayer.alpha = st.heatmapOpacity;
+    this.shadow.cylinder!.material = new ColorMaterialProperty(Color.BLACK.withAlpha(st.shadowOpacity)) as never;
+    for (const s of this.sats.values()) this.applyStyleTo(s);
+    for (const s of this.sats.values()) for (const l of s.links.values()) l.entity.polyline!.material = new ColorMaterialProperty(Color.fromCssColorString(st.linkColor).withAlpha(0.9)) as never;
+  }
+
+  private applyStyleTo(s: Sat3D): void {
+    if (s.light) return;
+    const st = this.style, c = Color.fromCssColorString(s.sat.color), e = s.entities;
+    const set = (en: Entity | undefined, width: number, mat: unknown) => { if (en?.polyline) { en.polyline.width = width as never; en.polyline.material = mat as never; } };
+    set(e.orbitPast, st.orbitWidth * 0.75, new ColorMaterialProperty(c.withAlpha(st.orbitOpacity * 0.37)));
+    set(e.orbitFuture, st.orbitWidth * 3, new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c.withAlpha(st.orbitOpacity) }));
+    set(e.gtPast, st.trackWidth * 0.75, new ColorMaterialProperty(Color.WHITE.withAlpha(st.trackOpacity * 0.4)));
+    set(e.gtFuture, st.trackWidth, new PolylineDashMaterialProperty({ color: Color.fromCssColorString(st.trackColor).withAlpha(st.trackOpacity), dashLength: 12 }));
+    if (s.foot?.polygon) s.foot.polygon.material = new ColorMaterialProperty(c.withAlpha(st.footprintOpacity)) as never;
   }
 
   select(id: string | null): void {
@@ -243,11 +318,12 @@ export class CesiumScene {
 
   setOverlayProvider(p: (() => Overlay) | null): void { this.overlayProvider = p; }
 
-  setTarget(t: { lat: number; lon: number } | null): void {
+  setTarget(t: { lat: number; lon: number; radiusKm?: number } | null): void {
     if (this.targetEntity) { this.viewer.entities.remove(this.targetEntity); this.targetEntity = null; }
     if (!t) return;
     this.targetEntity = this.viewer.entities.add({
       position: Cartesian3.fromDegrees(t.lon, t.lat, 0),
+      ellipse: t.radiusKm && t.radiusKm > 0 ? { semiMajorAxis: t.radiusKm * 1000, semiMinorAxis: t.radiusKm * 1000, material: Color.MAGENTA.withAlpha(0.22), outline: true, outlineColor: Color.MAGENTA, height: 0 } : undefined,
       point: { pixelSize: 11, color: Color.MAGENTA, outlineColor: Color.WHITE, outlineWidth: 2, heightReference: HeightReference.NONE, disableDepthTestDistance: 1e7 },
       label: { text: 'TARGET', font: '12px monospace', fillColor: Color.MAGENTA, pixelOffset: new Cartesian2(0, -16), style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, outlineColor: Color.BLACK, disableDepthTestDistance: 1e7 },
     });
@@ -303,7 +379,19 @@ export class CesiumScene {
     const mult = mode === 'closeup' ? 2.3 : 5;
     for (const s3 of this.sats.values()) if (s3.entity.model) { const r = modelUrl(s3.kind!).radius; s3.entity.viewFrom = new ConstantProperty(mode === 'closeup' ? new Cartesian3(r * mult * 0.75, -r * mult * 0.9, r * mult * 0.55) : new Cartesian3(0, -r * mult, r * mult * 0.5)); }
     if ((mode === 'follow' || mode === 'closeup') && this.selectedId && this.sats.has(this.selectedId)) v.trackedEntity = this.sats.get(this.selectedId)!.entity;
-    else if (mode === 'earth') v.camera.flyTo({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7), duration: 1.2 });
+    else if (mode === 'earth') v.camera.flyTo({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7), duration: 1.8 });
+    else if (mode === 'leo' || mode === 'coverage') {
+      const sel = this.selectedId ? this.sats.get(this.selectedId) : undefined;
+      const st = sel ? propagateSatellite(sel.sat, this.clock.time) : null;
+      const g = st ? ecefToGeodetic(eciToEcef(st.r, this.clock.time)) : { lat: 0.2, lon: 1.7, alt: 5e5 };
+      if (mode === 'leo') {
+        // low-Earth-orbit viewpoint: ~1500 km above a point 12° behind the satellite's sub-point, looking forward along the horizon
+        v.camera.flyTo({ destination: Cartesian3.fromRadians(g.lon, g.lat - 0.2, 1.6e6), orientation: { heading: 0, pitch: CesiumMath.toRadians(-28), roll: 0 }, duration: 2.5 });
+      } else {
+        // global coverage view: whole disc centred on the satellite / region, footprints + heatmap visible
+        v.camera.flyTo({ destination: Cartesian3.fromRadians(g.lon, g.lat * 0.6, 2.6e7), duration: 2.5 });
+      }
+    } else this.camBlendStart = performance.now(); // per-frame modes: blend from the current pose
   }
 
   saveView(name: string): SavedView {
@@ -318,8 +406,19 @@ export class CesiumScene {
   private lookFrom(pos: Cartesian3, target: Cartesian3, upHint: Cartesian3): void {
     const dir = Cartesian3.normalize(Cartesian3.subtract(target, pos, new Cartesian3()), new Cartesian3());
     const k = Cartesian3.dot(upHint, dir);
-    const up = Cartesian3.normalize(Cartesian3.subtract(upHint, Cartesian3.multiplyByScalar(dir, k, new Cartesian3()), new Cartesian3()), new Cartesian3());
-    this.viewer.camera.setView({ destination: pos, orientation: { direction: dir, up } });
+    let up = Cartesian3.normalize(Cartesian3.subtract(upHint, Cartesian3.multiplyByScalar(dir, k, new Cartesian3()), new Cartesian3()), new Cartesian3());
+    const cam = this.viewer.camera;
+    // smooth transition: ease the pose from where the camera was when the mode was selected (1.6 s, smoothstep)
+    const f = Math.min(1, (performance.now() - this.camBlendStart) / 1600), e = f * f * (3 - 2 * f);
+    let dst = pos, dr = dir;
+    if (f < 1) {
+      dst = Cartesian3.lerp(cam.positionWC, pos, e, new Cartesian3());
+      dr = Cartesian3.normalize(Cartesian3.lerp(cam.directionWC, dir, e, new Cartesian3()), new Cartesian3());
+      const u2 = Cartesian3.lerp(cam.upWC, up, e, new Cartesian3());
+      const kk = Cartesian3.dot(u2, dr);
+      up = Cartesian3.normalize(Cartesian3.subtract(u2, Cartesian3.multiplyByScalar(dr, kk, new Cartesian3()), new Cartesian3()), new Cartesian3());
+    }
+    cam.setView({ destination: dst, orientation: { direction: dr, up } });
   }
 
   private cameraFrame(t: number): void {
@@ -397,8 +496,13 @@ export class CesiumScene {
       entity.orientation = new ConstantProperty(Quaternion.IDENTITY);
       entity.viewFrom = new ConstantProperty(new Cartesian3(0, -m.radius * 5, m.radius * 2.5)); // replaced per camera mode
     }
-    const s3: Sat3D = { sat, light, kind, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map() };
+    const s3: Sat3D = { sat, light, kind, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map(), cart: new Cartesian3(), surf: new Cartesian3(), footPts: [], pools: { past: [], fut: [], gtp: [], gtf: [], ghost: [] } };
+    arrays.nadir = [s3.cart, s3.surf];
     if (light) return s3;
+    if (propsOf(sat).sensorHalfAngle) {
+      // sensor ground footprint for EVERY satellite that has a sensor (multi-satellite coverage view)
+      s3.foot = v.entities.add({ polygon: { hierarchy: new CallbackProperty(() => new PolygonHierarchy(s3.footPts), false), material: color.withAlpha(this.style.footprintOpacity), perPositionHeight: false, outline: false }, show: false });
+    }
     const line = (name: string, get: () => Cartesian3[], c: Color, width: number, dashed = false, glow = false) =>
       v.entities.add({ name, polyline: { positions: new CallbackProperty(get, false), width: glow ? width * 3 : width, arcType: 0 as never, material: glow ? new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c }) : dashed ? new PolylineDashMaterialProperty({ color: c, dashLength: 12 }) : new ColorMaterialProperty(c) } });
     s3.nadirPos = new ConstantPositionProperty(Cartesian3.ZERO);
@@ -411,12 +515,13 @@ export class CesiumScene {
       gtFuture: line(`${sat.name} future ground track`, () => arrays.gtFuture, Color.YELLOW.withAlpha(0.9), 2, true),
       ghost: line(`${sat.name} orbit without maneuver`, () => arrays.ghost, Color.WHITE.withAlpha(0.55), 1.5, true),
     };
+    this.applyStyleTo(s3);
     return s3;
   }
 
   private removeSat(s: Sat3D): void {
     const v = this.viewer;
-    [s.entity, ...Object.values(s.entities), ...[...s.links.values()].map((l) => l.entity)].forEach((e) => e && v.entities.remove(e));
+    [s.entity, s.foot, ...Object.values(s.entities), ...[...s.links.values()].map((l) => l.entity)].forEach((e) => e && v.entities.remove(e));
   }
 
   /* ---------------- per frame ---------------- */
@@ -434,7 +539,7 @@ export class CesiumScene {
       const st = propagateSatellite(s3.sat, t);
       if (!st || this.hidden.has(s3.sat.id)) { s3.entity.show = false; for (const e of Object.values(s3.entities)) if (e) e.show = false; for (const l of s3.links.values()) l.entity.show = false; continue; }
       const rE = eciToEcef(st.r, t);
-      const cart = new Cartesian3(rE[0], rE[1], rE[2]);
+      const cart = s3.cart; cart.x = rE[0]; cart.y = rE[1]; cart.z = rE[2];
       s3.pos.setValue(cart);
       states.set(s3.sat.id, { rE, cart });
       if (s3.light) { s3.entity.show = this.layers?.debris ?? true; continue; }
@@ -445,16 +550,36 @@ export class CesiumScene {
       const L = this.layers;
       s3.entity.show = L?.satellites ?? true;
       for (const [k, e] of Object.entries(s3.entities)) if (e) e.show = k === 'ghost' ? (L?.orbits ?? true) && !!s3.sat.maneuvers?.length : k.startsWith('gt') ? L?.groundTracks ?? true : k.startsWith('nadir') ? L?.nadirLine ?? true : L?.orbits ?? true;
-      const pt = pointFromState(st);
-      const surf = Cartesian3.fromRadians(pt.geo.lon, pt.geo.lat, 0);
-      s3.nadirPos!.setValue(surf);
-      s3.arrays.nadir = [cart, surf];
+      const geo = ecefToGeodetic(rE);
+      Cartesian3.fromRadians(geo.lon, geo.lat, 0, Ellipsoid.WGS84, s3.surf);
+      s3.nadirPos!.setValue(s3.surf);
+      // footprint polygon of this satellite's sensor (attitude-aware)
+      const alpha = propsOf(s3.sat).sensorHalfAngle;
+      if (s3.foot) {
+        const on = !!alpha && !!qb && (L?.footprints ?? true);
+        let ok = false;
+        if (on && qb) {
+          const bore = eciToEcef(quatRotate(qb, [0, 0, 1]), t);
+          const ring = sensorFootprint(rE, bore, alpha!, 40);
+          if (ring.every((p) => p)) { s3.footPts.length = 0; for (const p of ring as Vec3[]) s3.footPts.push(new Cartesian3(p[0], p[1], p[2])); ok = true; }
+        }
+        s3.foot.show = ok;
+      }
       this.refreshPaths(s3, t, c, sn);
       this.updateLinks(s3, cart, rE);
       if (s3.sat.id === this.selectedId) {
         const R = Math.hypot(...rE);
         for (const g of this.stns.values()) g.coneRadius.v = R_EARTH * visibilityCentralAngle(R_EARTH, R, g.stn.minElevation);
       }
+    }
+    // Earth umbra cone: axis = anti-Sun direction (ECEF), centred L/2 behind Earth's centre
+    if (this.layers?.eclipseShadow) {
+      const sd = eciToEcef(sunPositionEci(t), t), sn2 = Math.hypot(...sd), d: Vec3 = [-sd[0] / sn2, -sd[1] / sn2, -sd[2] / sn2];
+      const L2 = 6e7 / 2;
+      this.shadowState.pos = new Cartesian3(d[0] * L2, d[1] * L2, d[2] * L2);
+      // rotate the cylinder's +Z axis onto d
+      const ax: Vec3 = [-d[1], d[0], 0], an = Math.hypot(...ax), ang = Math.acos(Math.max(-1, Math.min(1, d[2])));
+      this.shadowState.q = an < 1e-9 ? (d[2] > 0 ? Quaternion.IDENTITY : Quaternion.fromAxisAngle(Cartesian3.UNIT_X, Math.PI)) : Quaternion.fromAxisAngle(new Cartesian3(ax[0] / an, ax[1] / an, ax[2] / an), ang);
     }
     this.updateSelectedFx(t, states);
     if (this.conjEntity) {
@@ -493,16 +618,19 @@ export class CesiumScene {
   private updateSelectedFx(t: number, states: Map<string, { rE: Vec3; cart: Cartesian3 }>): void {
     const fx = this.fx, s3 = this.selectedId ? this.sats.get(this.selectedId) : undefined;
     const cur = s3 ? states.get(s3.sat.id) : undefined;
-    const hide = () => { fx.sunVec.show = false; fx.axLabels.forEach((a) => (a.show = false)); fx.burnVec.show = fx.plume.show = fx.foot.show = false; fx.axes.forEach((a) => (a.show = false)); fx.cone.forEach((a) => (a.show = false)); };
+    const hide = () => { fx.velVec.show = false; fx.sunVec.show = false; fx.axLabels.forEach((a) => (a.show = false)); fx.burnVec.show = fx.plume.show = fx.foot.show = false; fx.axes.forEach((a) => (a.show = false)); fx.cone.forEach((a) => (a.show = false)); };
     if (!s3 || !cur || s3.light) return hide();
     const st = propagateSatellite(s3.sat, t);
     if (!st) return hide();
     const rot = (x: Vec3): Vec3 => eciToEcef(x, t);
     const P = cur.cart;
     const add = (d: Vec3, len: number) => new Cartesian3(P.x + d[0] * len, P.y + d[1] * len, P.z + d[2] * len);
+    const L = this.layers;
+    // velocity vector (ECEF-rotated inertial velocity direction), length 900 km
+    fx.velVec.show = L?.velocityVector ?? true;
+    { const vE = rot(st.v), vn = Math.hypot(...vE); fx.velArr[0] = P; fx.velArr[1] = add([vE[0] / vn, vE[1] / vn, vE[2] / vn], 900_000); }
     // burn
     const burn = activeBurn(s3.sat.maneuvers, t);
-    const L = this.layers;
     fx.burnVec.show = fx.plume.show = !!burn && (L?.eventEffects ?? true);
     if (burn) {
       const d = rot(burnDirection(burn.direction, st.r, st.v));
@@ -520,13 +648,10 @@ export class CesiumScene {
     if (q && showAx) ([[1, 0, 0], [0, 1, 0], [0, 0, 1]] as Vec3[]).forEach((ax, i) => { fx.axArr[i][0] = P; fx.axArr[i][1] = add(rot(quatRotate(q, ax)), 700_000); });
     const alpha = propsOf(s3.sat).sensorHalfAngle;
     const showSensor = !!q && !!alpha && (L?.footprints ?? true);
-    fx.foot.show = showSensor; fx.cone.forEach((a) => (a.show = showSensor));
+    fx.foot.show = false; fx.cone.forEach((a) => (a.show = showSensor));
     if (q && alpha && showSensor) {
       const bore = rot(quatRotate(q, [0, 0, 1]));
       const ring = sensorFootprint(cur.rE, bore, alpha, 48);
-      const pts = ring.filter((p): p is Vec3 => !!p).map((p) => new Cartesian3(p[0], p[1], p[2]));
-      fx.footPts.length = 0; pts.forEach((p) => fx.footPts.push(p));
-      if (pts.length < 3) fx.foot.show = false;
       [0, 12, 24, 36].forEach((k, i) => { const p = ring[k]; fx.coneArr[i][0] = P; fx.coneArr[i][1] = p ? new Cartesian3(p[0], p[1], p[2]) : add(bore, 2_000_000); });
     }
   }
@@ -552,20 +677,26 @@ export class CesiumScene {
       }
       cache = s3.cache = { tRef: t, period, samples, ghost, key };
     }
-    const P = cache.period * 1000;
-    const past: Cartesian3[] = [], fut: Cartesian3[] = [], gtp: Cartesian3[] = [], gtf: Cartesian3[] = [];
+    const P = cache.period * 1000, pl = s3.pools;
+    // fill pooled Cartesian3 objects in place (no allocation per frame except the small slice arrays)
+    const put = (pool: Cartesian3[], i: number, x: number, y: number, z: number): void => { const o = pool[i]; if (o) { o.x = x; o.y = y; o.z = z; } else pool[i] = new Cartesian3(x, y, z); };
+    const putGeo = (pool: Cartesian3[], i: number, lon: number, lat: number): void => { const o = pool[i] ?? (pool[i] = new Cartesian3()); Cartesian3.fromRadians(lon, lat, 2000, Ellipsoid.WGS84, o); };
+    let np = 1, nf = 1, ngp = 1, ngf = 1; // index 0 reserved for the current position / nadir point
     for (const p of cache.samples) {
       const dt = p.t - t;
       if (dt < -P * 0.5 || dt > P) continue;
-      const r = p.rEci;
-      const cart = new Cartesian3(c * r[0] + sn * r[1], -sn * r[0] + c * r[1], r[2]);
-      const gt = Cartesian3.fromRadians(p.geo.lon, p.geo.lat, 2000);
-      if (dt <= 0) { past.push(cart); gtp.push(gt); } else { fut.push(cart); gtf.push(gt); }
+      const r = p.rEci, x = c * r[0] + sn * r[1], y = -sn * r[0] + c * r[1];
+      if (dt <= 0) { put(pl.past, np, x, y, r[2]); putGeo(pl.gtp, ngp, p.geo.lon, p.geo.lat); np++; ngp++; }
+      else { put(pl.fut, nf, x, y, r[2]); putGeo(pl.gtf, ngf, p.geo.lon, p.geo.lat); nf++; ngf++; }
     }
-    const now = s3.arrays.nadir[0], nowSurf = s3.arrays.nadir[1];
-    past.push(now); fut.unshift(now); gtp.push(nowSurf); gtf.unshift(nowSurf);
-    s3.arrays.orbitPast = past; s3.arrays.orbitFuture = fut; s3.arrays.gtPast = gtp; s3.arrays.gtFuture = gtf;
-    s3.arrays.ghost = cache.ghost.filter((p) => p.t >= t - P * 0.5 && p.t <= t + P).map((p) => new Cartesian3(c * p.rEci[0] + sn * p.rEci[1], -sn * p.rEci[0] + c * p.rEci[1], p.rEci[2]));
+    pl.past[0] = pl.fut[0] = s3.cart; pl.gtp[0] = pl.gtf[0] = s3.surf;
+    // past path runs old→now: put "now" at the end; future runs now→later: "now" is index 0 already
+    const past = pl.past.slice(1, np); past.push(s3.cart);
+    const gtp = pl.gtp.slice(1, ngp); gtp.push(s3.surf);
+    s3.arrays.orbitPast = past; s3.arrays.orbitFuture = pl.fut.slice(0, nf); s3.arrays.gtPast = gtp; s3.arrays.gtFuture = pl.gtf.slice(0, ngf);
+    let ng = 0;
+    for (const p of cache.ghost) if (p.t >= t - P * 0.5 && p.t <= t + P) put(pl.ghost, ng++, c * p.rEci[0] + sn * p.rEci[1], -sn * p.rEci[0] + c * p.rEci[1], p.rEci[2]);
+    s3.arrays.ghost = pl.ghost.slice(0, ng);
   }
 
   /* ---------------- capture ---------------- */

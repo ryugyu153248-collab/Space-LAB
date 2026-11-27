@@ -5,6 +5,7 @@ import { tleStaleness } from '@/engine/data/tle';
 import { propsOf } from '@/engine/orbital/propagate';
 import { EVENT_COLORS } from '@/engine/events/EventTypes';
 import { sceneRegistry } from '@/engine/cesium/registry';
+import { DEFAULT_STYLE, type StyleSettings } from '@/engine/cesium/style';
 
 function Section({ title, count, children, open = true, action }: { title: string; count?: number; children: ReactNode; open?: boolean; action?: ReactNode }) {
   const [o, setO] = useState(open);
@@ -21,13 +22,25 @@ function Section({ title, count, children, open = true, action }: { title: strin
 }
 
 const GROUPS: [string, [keyof Layers, string][]][] = [
-  ['Display', [['satellites', 'Satellites'], ['models', '3D spacecraft models'], ['labels', 'Labels'], ['debris', 'Debris'], ['atmosphere', 'Atmosphere'], ['lighting', 'Day/night lighting (Sun)']]],
-  ['Imagery (online)', [['hiresImagery', 'High-res imagery (Esri World Imagery)'], ['cityLights', 'City lights at night']]],
+  ['Earth', [['hiresImagery', 'Earth surface — Esri World Imagery (online)'], ['terrain', 'Terrain (Cesium World Terrain / AWS Terrarium)'], ['atmosphere', 'Atmosphere & limb glow'], ['clouds', 'Clouds (procedural)'], ['cityLights', 'Night lights (NASA VIIRS, online)'], ['lighting', 'Day/night lighting & terminator']]],
+  ['Space', [['sun', 'Sun'], ['moon', 'Moon'], ['stars', 'Stars'], ['eclipseShadow', 'Earth shadow (umbra cone)']]],
+  ['Spacecraft', [['satellites', 'Satellites'], ['models', '3D spacecraft models'], ['labels', 'Labels'], ['debris', 'Debris objects'], ['bodyAxes', 'Body axes / Sun vector (near view)'], ['velocityVector', 'Velocity vector']]],
   ['Orbits & tracks', [['orbits', 'Orbit paths (past / future / pre-maneuver)'], ['groundTracks', 'Ground tracks'], ['nadirLine', 'Sub-satellite point / nadir']]],
-  ['Sensors & attitude', [['footprints', 'Sensor cone & footprint'], ['bodyAxes', 'Body axes']]],
+  ['Sensors & coverage', [['footprints', 'Sensor cone & footprints (all satellites)'], ['coverage', 'Coverage heatmap']]],
   ['Ground & links', [['stations', 'Ground stations'], ['visibilityCones', 'Visibility cones'], ['commLinks', 'Communication links']]],
-  ['Events & analysis', [['conjunction', 'Conjunction line'], ['eventEffects', 'Burn vector / plume / impact'], ['coverage', 'Coverage heatmap'], ['saa', 'South Atlantic Anomaly (sim.)']]],
+  ['Events & analysis', [['conjunction', 'Conjunction visualization'], ['eventEffects', 'Burn vector / plume / impact'], ['saa', 'South Atlantic Anomaly (sim.)']]],
 ];
+
+function Slider({ label, k, min, max, step }: { label: string; k: keyof StyleSettings; min: number; max: number; step: number }) {
+  const v = useStore((s) => s.style[k]) as number;
+  const set = useStore((s) => s.setStyle);
+  return <label className="flex items-center gap-2 px-3 py-[2px] text-slate-400"><span className="w-28 shrink-0">{label}</span><input type="range" className="flex-1" min={min} max={max} step={step} value={v} onChange={(e) => set({ [k]: Number(e.target.value) })} /><span className="num w-9 text-right text-slate-300">{v}</span></label>;
+}
+function ColorPick({ label, k }: { label: string; k: 'trackColor' | 'linkColor' }) {
+  const v = useStore((s) => s.style[k]);
+  const set = useStore((s) => s.setStyle);
+  return <label className="flex items-center gap-2 px-3 py-[2px] text-slate-400"><span className="w-28 shrink-0">{label}</span><input type="color" value={v} onChange={(e) => set({ [k]: e.target.value })} className="h-5 w-10 bg-transparent" /><span className="num text-slate-300">{v}</span></label>;
+}
 
 function Eye({ id }: { id: string }) {
   const hidden = useStore((s) => s.hidden[id]);
@@ -102,8 +115,16 @@ export function LeftPanel() {
           ))}
         </Section>
       ))}
+      <Section title="Style (colour / opacity / width)" open={false} action={<button className="btn !py-0" onClick={() => useStore.getState().setStyle({ ...DEFAULT_STYLE })}>reset</button>}>
+        <Slider label="Orbit width" k="orbitWidth" min={0.5} max={6} step={0.5} /><Slider label="Orbit opacity" k="orbitOpacity" min={0.1} max={1} step={0.05} />
+        <Slider label="Track width" k="trackWidth" min={0.5} max={6} step={0.5} /><Slider label="Track opacity" k="trackOpacity" min={0.1} max={1} step={0.05} />
+        <ColorPick label="Track colour" k="trackColor" /><ColorPick label="Link colour" k="linkColor" />
+        <Slider label="Footprint opacity" k="footprintOpacity" min={0.05} max={0.9} step={0.05} /><Slider label="Heatmap opacity" k="heatmapOpacity" min={0.1} max={1} step={0.05} />
+        <Slider label="Cloud opacity" k="cloudOpacity" min={0} max={1} step={0.05} /><Slider label="Shadow opacity" k="shadowOpacity" min={0.05} max={0.8} step={0.05} />
+        <Slider label="Atmosphere" k="atmosphere" min={0.2} max={3} step={0.1} /><Slider label="Terrain ×" k="exaggeration" min={1} max={6} step={0.5} />
+      </Section>
       <div className="px-3 py-3 text-[10px] text-slate-500 leading-relaxed">
-        Base imagery: {import.meta.env.VITE_CESIUM_ION_TOKEN ? 'Cesium World Imagery (Ion)' : 'NaturalEarthII offline + NASA GIBS (online). Set VITE_CESIUM_ION_TOKEN for Cesium imagery/terrain.'}
+        Imagery: {import.meta.env.VITE_CESIUM_ION_TOKEN ? 'Cesium World Imagery + World Terrain (Ion)' : 'offline NaturalEarthII base + Esri World Imagery, AWS Terrarium terrain and NASA night lights (online). Set VITE_CESIUM_ION_TOKEN for Cesium imagery/terrain.'}
       </div>
     </div>
   );

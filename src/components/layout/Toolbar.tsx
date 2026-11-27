@@ -22,8 +22,8 @@ const Item = ({ onClick, children, disabled }: { onClick: () => void; children: 
   <button disabled={disabled} className="block w-full text-left px-3 py-1 hover:bg-slate-800 disabled:opacity-40" onClick={onClick}>{children}</button>
 );
 
-const CAMS: [CameraMode, string][] = [['earth', 'Earth view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative view (A→B)'], ['dual', 'Dual satellite comparison'], ['free', 'Free camera']];
-const TABS: [AnyTab, string][] = [['info', 'Object info (right)'], ['maneuver', 'Maneuvers (right)'], ['conjunction', 'Conjunction & avoidance (right)'], ['events', 'Events (right)'], ['coverage', 'Coverage & targets (right)'], ['report', 'Reports & export (right)'], ['orbit', 'Orbit charts (bottom)'], ['access', 'Ground station access (bottom)'], ['telemetry', 'Telemetry — simulated (bottom)']];
+const CAMS: [CameraMode, string][] = [['earth', 'Earth overview'], ['leo', 'Low Earth orbit view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative satellite view (A→B)'], ['dual', 'Dual satellite comparison'], ['coverage', 'Global coverage view'], ['free', 'Free camera']];
+const TABS: [AnyTab, string][] = [['info', 'Properties (right)'], ['maneuver', 'Maneuvers (right)'], ['conjunction', 'Conjunction & avoidance (right)'], ['events', 'Events (right)'], ['coverage', 'Coverage & targets (right)'], ['report', 'Reports & export (right)'], ['telemetry', 'Telemetry — simulated (right)'], ['orbit', 'Orbit charts (bottom)'], ['access', 'Ground station access (bottom)']];
 
 export function Toolbar() {
   const s = useStore();
@@ -54,7 +54,8 @@ export function Toolbar() {
         <Item onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.(); }}>Browser full screen</Item></>}</Menu>
       <div className="w-px h-5 bg-edge mx-2" />
       <button className="btn" onClick={() => setDialog('import')}>+ Satellite</button>
-      <select className="btn" value={cameraMode} onChange={(e) => setCameraMode(e.target.value as CameraMode)} title="Camera mode">{CAMS.map(([k, l]) => <option key={k} value={k} disabled={(k === 'follow' || k === 'closeup') && !selectedId}>{l}</option>)}</select>
+      <select className="btn" value={cameraMode} onChange={(e) => setCameraMode(e.target.value as CameraMode)} title="Camera mode">{CAMS.map(([k, l]) => <option key={k} value={k} disabled={(k === 'follow' || k === 'closeup' || k === 'leo') && !selectedId}>{l}</option>)}</select>
+      <button className="btn" title="Hide / show all panels (full-screen globe)" onClick={() => { const all = panels.left || panels.right || panels.bottom; useStore.setState({ panels: { left: !all, right: !all, bottom: !all } }); }}>⛶ Focus</button>
       <button className="btn btn-on" disabled={!selectedId} title="Full-screen view of the selected spacecraft model" onClick={() => setModelView(true)}>🛰 Model view</button>
       <div className="flex-1" />
       <span className="text-slate-500 text-[10px] truncate max-w-[260px]" title={scenarioName}>{scenarioName}</span>

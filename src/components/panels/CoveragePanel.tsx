@@ -37,6 +37,7 @@ export function CoveragePanel() {
   const [prog, setProg] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [tl, setTl] = useState({ lat: target?.lat ?? 13.7563, lon: target?.lon ?? 100.5018 });
+  const [radius, setRadius] = useState(target?.radiusKm ?? 0);
   const tgt = target ?? tl;
 
   const setSensor = () => { if (sat && baseSatellites.some((b) => b.id === sat.id)) updateSatellite(sat.id, { props: { ...propsOf(sat), sensorHalfAngle: half * DEG } }); };
@@ -58,8 +59,8 @@ export function CoveragePanel() {
   const windows = useMemo(() => {
     if (!sat) return [];
     const c = clock.snapshot();
-    return computeTargetWindows(sat, { lat: tgt.lat * DEG, lon: tgt.lon * DEG, alt: 0 }, half * DEG, c.start, c.end);
-  }, [sat, tgt.lat, tgt.lon, half]); // eslint-disable-line react-hooks/exhaustive-deps
+    return computeTargetWindows(sat, { lat: tgt.lat * DEG, lon: tgt.lon * DEG, alt: 0 }, half * DEG, c.start, c.end, 20, radius * 1000);
+  }, [sat, tgt.lat, tgt.lon, half, radius]); // eslint-disable-line react-hooks/exhaustive-deps
   const series = useMemo(() => {
     if (!sat) return [];
     const out: { t: number; off: number | null }[] = [];
@@ -96,11 +97,12 @@ export function CoveragePanel() {
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         <div className="text-slate-500 uppercase tracking-widest text-[10px]">Interactive target analysis</div>
         <div className="flex items-end gap-2 flex-wrap">
-          <Field label="Lat [°]"><Num className="w-24" value={tgt.lat} onChange={(v) => { setTl({ ...tgt, lat: v }); setTarget({ lat: v, lon: tgt.lon }); }} /></Field>
-          <Field label="Lon [°]"><Num className="w-24" value={tgt.lon} onChange={(v) => { setTl({ ...tgt, lon: v }); setTarget({ lat: tgt.lat, lon: v }); }} /></Field>
+          <Field label="Lat [°]"><Num className="w-24" value={tgt.lat} onChange={(v) => { setTl({ ...tgt, lat: v }); setTarget({ lat: v, lon: tgt.lon, radiusKm: radius }); }} /></Field>
+          <Field label="Lon [°]"><Num className="w-24" value={tgt.lon} onChange={(v) => { setTl({ ...tgt, lon: v }); setTarget({ lat: tgt.lat, lon: v, radiusKm: radius }); }} /></Field>
+          <Field label="Area radius [km] (0 = point)"><Num className="w-24" value={radius} onChange={(v) => { setRadius(v); setTarget({ lat: tgt.lat, lon: tgt.lon, radiusKm: v }); }} /></Field>
           <button className={`btn ${pickMode ? 'btn-on' : ''}`} onClick={() => setPickMode(!pickMode)}>{pickMode ? 'Click on the globe…' : 'Pick target on globe'}</button>
-          <button className="btn" onClick={() => setTarget({ lat: tgt.lat, lon: tgt.lon })}>Show target</button>
-          <span className="text-slate-500">Observed when the target is inside the sensor cone ({half}° half-angle, nadir) and above the horizon.</span>
+          <button className="btn" onClick={() => setTarget({ lat: tgt.lat, lon: tgt.lon, radiusKm: radius })}>Show target</button>
+          <span className="text-slate-500">Observed when the target (point, or circular area of the given radius — overlap with the footprint) is inside the sensor cone ({half}° half-angle, nadir) and above the horizon.</span>
         </div>
         <div className="flex gap-3">
           <div className="w-1/2 max-h-40 overflow-y-auto"><table className="w-full num"><thead className="text-slate-500 text-left"><tr><th>#</th><th>Start</th><th>Dur [s]</th><th>Min off-nadir [°]</th><th>Range [km]</th></tr></thead><tbody>

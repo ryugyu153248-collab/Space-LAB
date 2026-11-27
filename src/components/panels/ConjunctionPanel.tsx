@@ -3,7 +3,8 @@ import type { BurnDirection } from '@/types';
 import { useStore } from '@/stores/store';
 import { jumpTo } from '@/engine/simulation/runtime';
 import { newEvent } from '@/engine/events/EventManager';
-import { screenConjunctions, type Conjunction } from '@/engine/analysis/conjunction';
+import type { Conjunction } from '@/engine/analysis/conjunction';
+import { runConjunctions } from '@/engine/analysis/conjunctionRunner';
 import { classifyRisk, collisionProbability } from '@/engine/analysis/collisionRisk';
 import { evaluateAvoidance, minimumAvoidanceDv, type AvoidanceCandidate } from '@/engine/analysis/avoidance';
 import { formatUtc } from '@/engine/orbital/time';
@@ -36,9 +37,9 @@ export function ConjunctionPanel() {
 
   const analyze = async () => {
     if (!a) return;
-    setBusy('Screening…'); await later();
+    setBusy('Screening in a Web Worker…');
     const others = vsAll ? satellites.filter((s) => s.id !== a.id) : b ? [b] : [];
-    const r = screenConjunctions(a, others, clock.start, clock.end, { screenDistance: screenKm * 1000 }).sort((x, y) => x.tca - y.tca);
+    const r = (await runConjunctions(a, others, clock.start, clock.end, screenKm * 1000).catch(() => [] as Conjunction[])).sort((x, y) => x.tca - y.tca);
     setResults(r); setSel(0); setCand(null); setBusy('');
     if (r[0]) setConjunctionPair([r[0].primaryId, r[0].secondaryId]);
   };
