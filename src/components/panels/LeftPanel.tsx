@@ -42,6 +42,16 @@ function ColorPick({ label, k }: { label: string; k: 'trackColor' | 'linkColor' 
   return <label className="flex items-center gap-2 px-3 py-[2px] text-slate-400"><span className="w-28 shrink-0">{label}</span><input type="color" value={v} onChange={(e) => set({ [k]: e.target.value })} className="h-5 w-10 bg-transparent" /><span className="num text-slate-300">{v}</span></label>;
 }
 
+function LookSwitch() {
+  const look = useStore((s) => s.look), set = useStore((s) => s.setLook);
+  return (
+    <div className="px-3 pb-2 flex items-center gap-1">
+      <span className="text-slate-400 mr-1">Earth look</span>
+      {(['standard', 'cinematic'] as const).map((k) => <button key={k} title={k === 'standard' ? 'Plain, smooth: no glow, bloom, city lights or clouds' : 'HDR, bloom, glow, city lights and clouds'} className={`btn ${look === k ? 'btn-on' : ''}`} onClick={() => set(k)}>{k === 'standard' ? 'Standard' : 'Cinematic'}</button>)}
+    </div>
+  );
+}
+
 function Eye({ id }: { id: string }) {
   const hidden = useStore((s) => s.hidden[id]);
   const toggle = useStore((s) => s.toggleHidden);
@@ -108,6 +118,7 @@ export function LeftPanel() {
         {!views.length && <div className="px-3 text-slate-600">Save the current camera with ＋.</div>}
       </Section>
       <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-widest text-slate-500">Globe manager</div>
+      <LookSwitch />
       {GROUPS.map(([title, items], gi) => (
         <Section key={title} title={title} open={gi < 2}>
           {items.map(([k, label]) => (

@@ -22,7 +22,7 @@ import { saaOutline } from '../orbital/environment';
 import type { SimEvent } from '../events/EventTypes';
 import { createTerrariumProvider } from './terrain';
 import { cloudCanvas } from './clouds';
-import { DEFAULT_STYLE, type StyleSettings } from './style';
+import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from './style';
 
 /**
  * Visualization only. All positions come from the Orbital Engine (propagateSatellite); Cesium never computes physics.
@@ -82,6 +82,7 @@ export class CesiumScene {
   private terrain: TerrainProvider | null = null;
   private flat = new EllipsoidTerrainProvider();
   private style: StyleSettings = { ...DEFAULT_STYLE };
+  private look: EarthLook = 'standard';
   private shadow: Entity;
   private shadowState = { pos: new Cartesian3(), q: new Quaternion() };
   private camBlendStart = 0;
@@ -146,17 +147,15 @@ export class CesiumScene {
     scene.globe.enableLighting = true;
     scene.globe.showGroundAtmosphere = true;
     scene.globe.baseColor = Color.fromCssColorString('#0a1a2f');
-    scene.highDynamicRange = true;
-    if (scene.skyAtmosphere) { scene.skyAtmosphere.perFragmentAtmosphere = true; scene.skyAtmosphere.atmosphereLightIntensity = 60; }
+    scene.highDynamicRange = false;
     scene.fog.enabled = false;
+    // smoothness: cap the render resolution on hi-DPI screens, gentle camera inertia, FXAA instead of heavy post-processing
+    v.useBrowserRecommendedResolution = false;
+    v.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.5);
+    const cc = scene.screenSpaceCameraController;
+    cc.inertiaSpin = 0.94; cc.inertiaTranslate = 0.94; cc.inertiaZoom = 0.88; cc.minimumZoomDistance = 2;
     scene.globe.depthTestAgainstTerrain = false;
-    scene.globe.maximumScreenSpaceError = 1.2;
-    scene.globe.atmosphereLightIntensity = 14;
-    scene.globe.dynamicAtmosphereLighting = true;
-    scene.globe.dynamicAtmosphereLightingFromSun = true;
     scene.postProcessStages.fxaa.enabled = true;
-    const bloom = scene.postProcessStages.bloom;
-    bloom.enabled = true; bloom.uniforms.brightness = -0.35; bloom.uniforms.contrast = 110; bloom.uniforms.glowOnly = false;
     v.camera.setView({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7) });
 
     const pts = saaOutline();
@@ -194,6 +193,7 @@ export class CesiumScene {
       foot: v.entities.add({ polygon: { hierarchy: new CallbackProperty(() => new PolygonHierarchy(footPts), false), material: Color.CYAN.withAlpha(0.22), perPositionHeight: false, outline: false }, show: false }),
     };
 
+    this.setLook('standard'); // after the shadow / fx entities exist
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction((e: { position: Cartesian2 }) => {
       if (this.pickMode) {
@@ -275,6 +275,24 @@ export class CesiumScene {
     for (const x of this.effects) x.entity.show = l.eventEffects;
   }
 
+  /**
+   * 'standard': plain smooth Earth — no bloom/HDR/glow/city lights/clouds, default Cesium atmosphere, coarser tile LOD for a steady frame rate.
+   * 'cinematic': HDR, bloom, per-fragment atmosphere, glowing orbit lines (city lights / clouds follow the layer toggles).
+   */
+  setLook(look: EarthLook): void {
+    this.look = look;
+    const sc = this.viewer.scene, cin = look === 'cinematic';
+    sc.highDynamicRange = cin;
+    sc.globe.maximumScreenSpaceError = cin ? 1.2 : 2;
+    sc.globe.dynamicAtmosphereLighting = true;
+    sc.globe.dynamicAtmosphereLightingFromSun = cin;
+    const bloom = sc.postProcessStages.bloom;
+    bloom.enabled = cin;
+    if (cin) { bloom.uniforms.brightness = -0.35; bloom.uniforms.contrast = 110; bloom.uniforms.glowOnly = false; }
+    if (sc.skyAtmosphere) sc.skyAtmosphere.perFragmentAtmosphere = cin;
+    this.setStyle(this.style);
+  }
+
   private applyTerrain(): void {
     const want = this.layers?.terrain ?? true;
     const prov = want && this.terrain ? this.terrain : this.flat;
@@ -286,8 +304,9 @@ export class CesiumScene {
     this.style = st;
     const sc = this.viewer.scene;
     sc.verticalExaggeration = st.exaggeration;
-    sc.globe.atmosphereLightIntensity = 14 * st.atmosphere;
-    if (sc.skyAtmosphere) sc.skyAtmosphere.atmosphereLightIntensity = 60 * st.atmosphere;
+    const cin = this.look === 'cinematic';
+    sc.globe.atmosphereLightIntensity = (cin ? 14 : 10) * st.atmosphere;
+    if (sc.skyAtmosphere) sc.skyAtmosphere.atmosphereLightIntensity = (cin ? 60 : 50) * st.atmosphere;
     if (this.cloudLayer) this.cloudLayer.alpha = st.cloudOpacity;
     if (this.heatLayer) this.heatLayer.alpha = st.heatmapOpacity;
     this.shadow.cylinder!.material = new ColorMaterialProperty(Color.BLACK.withAlpha(st.shadowOpacity)) as never;
@@ -300,7 +319,7 @@ export class CesiumScene {
     const st = this.style, c = Color.fromCssColorString(s.sat.color), e = s.entities;
     const set = (en: Entity | undefined, width: number, mat: unknown) => { if (en?.polyline) { en.polyline.width = width as never; en.polyline.material = mat as never; } };
     set(e.orbitPast, st.orbitWidth * 0.75, new ColorMaterialProperty(c.withAlpha(st.orbitOpacity * 0.37)));
-    set(e.orbitFuture, st.orbitWidth * 3, new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c.withAlpha(st.orbitOpacity) }));
+    set(e.orbitFuture, this.look === 'cinematic' ? st.orbitWidth * 3 : st.orbitWidth, this.look === 'cinematic' ? new PolylineGlowMaterialProperty({ glowPower: 0.22, color: c.withAlpha(st.orbitOpacity) }) : new ColorMaterialProperty(c.withAlpha(st.orbitOpacity)));
     set(e.gtPast, st.trackWidth * 0.75, new ColorMaterialProperty(Color.WHITE.withAlpha(st.trackOpacity * 0.4)));
     set(e.gtFuture, st.trackWidth, new PolylineDashMaterialProperty({ color: Color.fromCssColorString(st.trackColor).withAlpha(st.trackOpacity), dashLength: 12 }));
     if (s.foot?.polygon) s.foot.polygon.material = new ColorMaterialProperty(c.withAlpha(st.footprintOpacity)) as never;
