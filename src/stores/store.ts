@@ -13,7 +13,10 @@ import type { CameraMode } from '@/engine/cesium/CesiumScene';
 
 export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights', boolean>;
 export type { CameraMode };
-export type BottomTab = 'orbit' | 'access' | 'maneuver' | 'conjunction' | 'events' | 'coverage' | 'telemetry' | 'report';
+export type BottomTab = 'orbit' | 'access' | 'telemetry';
+export type RightTab = 'info' | 'maneuver' | 'conjunction' | 'events' | 'coverage' | 'report';
+export type AnyTab = BottomTab | RightTab;
+const RIGHT_TABS: RightTab[] = ['info', 'maneuver', 'conjunction', 'events', 'coverage', 'report'];
 export type Dialog = null | 'import' | 'station' | 'scenario' | 'export' | 'capture';
 
 export interface Settings { stormLevel: number; covPrimary: number; covSecondary: number; hbr: number; useCovariance: boolean }
@@ -38,6 +41,9 @@ interface State {
   views: CameraView[];
   panels: { left: boolean; right: boolean; bottom: boolean };
   bottomTab: BottomTab;
+  rightTab: RightTab;
+  sizes: { left: number; right: number; bottom: number };
+  modelView: boolean;
   dialog: Dialog;
   editingEvent: string | null;
   settings: Settings;
@@ -68,7 +74,10 @@ interface State {
   setCameraMode: (m: CameraMode) => void;
   setViews: (v: CameraView[]) => void;
   togglePanel: (k: 'left' | 'right' | 'bottom') => void;
-  setBottomTab: (t: BottomTab) => void;
+  setBottomTab: (t: AnyTab) => void;
+  setRightTab: (t: RightTab) => void;
+  setSize: (k: 'left' | 'right' | 'bottom', v: number) => void;
+  setModelView: (b: boolean) => void;
   setDialog: (d: Dialog) => void;
   setEditingEvent: (id: string | null) => void;
   setSettings: (p: Partial<Settings>) => void;
@@ -101,7 +110,7 @@ export const useStore = create<State>((set, get) => ({
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
   layers: { ...DEFAULT_LAYERS } as Layers, clock: clock.snapshot(), cameraMode: 'earth', views: [],
-  panels: { left: true, right: true, bottom: true }, bottomTab: 'conjunction', dialog: null, editingEvent: null,
+  panels: { left: true, right: true, bottom: true }, bottomTab: 'orbit', rightTab: 'info', sizes: { left: 250, right: 400, bottom: 200 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: [demo.satellites[0].id, demo.satellites[1].id],
   presentation: false, uiHidden: false, toast: null,
 
@@ -153,7 +162,13 @@ export const useStore = create<State>((set, get) => ({
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setViews: (views) => set({ views }),
   togglePanel: (k) => set((s) => ({ panels: { ...s.panels, [k]: !s.panels[k] } })),
-  setBottomTab: (bottomTab) => set({ bottomTab, panels: { ...get().panels, bottom: true } }),
+  // function panels (forms/tables) live in the right dock, time-series in the bottom dock
+  setBottomTab: (t) => RIGHT_TABS.includes(t as RightTab)
+    ? set({ rightTab: t as RightTab, panels: { ...get().panels, right: true } })
+    : set({ bottomTab: t as BottomTab, panels: { ...get().panels, bottom: true } }),
+  setRightTab: (rightTab) => set({ rightTab, panels: { ...get().panels, right: true } }),
+  setSize: (k, v) => set((s) => ({ sizes: { ...s.sizes, [k]: Math.round(Math.min(k === 'bottom' ? 520 : 760, Math.max(k === 'bottom' ? 120 : 200, v))) } })),
+  setModelView: (modelView) => set((s) => ({ modelView, cameraMode: modelView ? 'closeup' : s.cameraMode === 'closeup' ? 'earth' : s.cameraMode })),
   setDialog: (dialog) => set({ dialog }),
   setEditingEvent: (editingEvent) => set({ editingEvent }),
   setSettings: (p) => set((s) => ({ settings: { ...s.settings, ...p } })),

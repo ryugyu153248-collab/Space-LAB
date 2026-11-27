@@ -18,7 +18,7 @@ export function RightPanel() {
   const { satellites, selectedId, clock: snap } = useStore();
   const { stn, result } = useAccess();
   const sat = satellites.find((s) => s.id === selectedId);
-  if (!sat) return <div className="w-72 shrink-0 bg-panel border-l border-edge p-3 text-slate-500">No satellite selected</div>;
+  if (!sat) return <div className="p-3 text-slate-500">No satellite selected</div>;
 
   const t = snap.time;
   const st = propagateSatellite(sat, t);
@@ -85,7 +85,7 @@ export function RightPanel() {
   }
 
   return (
-    <div className="w-72 shrink-0 bg-panel border-l border-edge overflow-y-auto pb-4">
+    <div className="pb-4">
       <div className="px-3 pt-3 flex items-center gap-2">
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: sat.color }} />
         <span className="text-sm text-slate-100 font-semibold truncate">{sat.name}</span>

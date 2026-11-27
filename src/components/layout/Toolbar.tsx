@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useStore, type BottomTab, type CameraMode } from '@/stores/store';
+import { useStore, type AnyTab, type CameraMode } from '@/stores/store';
 import { clock } from '@/engine/simulation/runtime';
-import { sceneRegistry } from '@/engine/cesium/registry';
 import { USER_EVENT_TYPES, handlers } from '@/engine/events/EventManager';
 import { TIME_RATES } from '@/engine/simulation/SimulationClock';
 import { localPut } from '@/engine/data/localStore';
@@ -23,13 +22,14 @@ const Item = ({ onClick, children, disabled }: { onClick: () => void; children: 
   <button disabled={disabled} className="block w-full text-left px-3 py-1 hover:bg-slate-800 disabled:opacity-40" onClick={onClick}>{children}</button>
 );
 
-const CAMS: [CameraMode, string][] = [['earth', 'Earth view'], ['follow', 'Satellite follow'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative view (A→B)'], ['dual', 'Dual satellite comparison'], ['free', 'Free camera']];
-const TABS: [BottomTab, string][] = [['orbit', 'Orbit charts'], ['access', 'Ground station access'], ['maneuver', 'Maneuvers'], ['conjunction', 'Conjunction & avoidance'], ['events', 'Events'], ['coverage', 'Coverage & targets'], ['telemetry', 'Telemetry (simulated)'], ['report', 'Reports & export']];
+const CAMS: [CameraMode, string][] = [['earth', 'Earth view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative view (A→B)'], ['dual', 'Dual satellite comparison'], ['free', 'Free camera']];
+const TABS: [AnyTab, string][] = [['info', 'Object info (right)'], ['maneuver', 'Maneuvers (right)'], ['conjunction', 'Conjunction & avoidance (right)'], ['events', 'Events (right)'], ['coverage', 'Coverage & targets (right)'], ['report', 'Reports & export (right)'], ['orbit', 'Orbit charts (bottom)'], ['access', 'Ground station access (bottom)'], ['telemetry', 'Telemetry — simulated (bottom)']];
 
 export function Toolbar() {
   const s = useStore();
-  const { panels, togglePanel, setDialog, cameraMode, setCameraMode, selectedId, scenarioName, presentation, setPresentation, setBottomTab, createEvent, setEditingEvent, views, setViews } = s;
+  const { panels, togglePanel, setDialog, cameraMode, setCameraMode, selectedId, scenarioName, presentation, setPresentation, setBottomTab, createEvent, setEditingEvent, setModelView } = s;
   const c = s.clock;
+  void setBottomTab;
   const quickSave = async () => { try { await localPut(s.snapshot()); s.notify('Scenario saved to this browser'); } catch (e) { s.notify(String(e)); } };
   return (
     <div className="h-9 flex items-center gap-1 px-3 bg-panel border-b border-edge shrink-0 relative z-30">
@@ -50,12 +50,12 @@ export function Toolbar() {
       <Menu label="Export">{() => <><Item onClick={() => setBottomTab('report')}>Reports & data (CSV / JSON / HTML)…</Item><Item onClick={() => setDialog('capture')}>Screenshot / video / event recording…</Item></>}</Menu>
       <Menu label="Settings">{() => <>
         <Item onClick={() => setPresentation(!presentation)}>{presentation ? 'Switch to Engineering mode' : 'Presentation mode'}</Item>
-        {(['left', 'right', 'bottom'] as const).map((k) => <Item key={k} onClick={() => togglePanel(k)}>{panels[k] ? 'Hide' : 'Show'} {k} panel</Item>)}</>}</Menu>
+        {(['left', 'right', 'bottom'] as const).map((k) => <Item key={k} onClick={() => togglePanel(k)}>{panels[k] ? 'Hide' : 'Show'} {k} panel</Item>)}
+        <Item onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.(); }}>Browser full screen</Item></>}</Menu>
       <div className="w-px h-5 bg-edge mx-2" />
       <button className="btn" onClick={() => setDialog('import')}>+ Satellite</button>
-      <select className="btn" value={cameraMode} onChange={(e) => setCameraMode(e.target.value as CameraMode)} title="Camera mode">{CAMS.map(([k, l]) => <option key={k} value={k} disabled={k === 'follow' && !selectedId}>{l}</option>)}</select>
-      <button className="btn" title="Save current camera view" onClick={() => { const v = sceneRegistry.scene?.saveView(`View ${views.length + 1}`); if (v) setViews([...views, v]); }}>＋View</button>
-      {views.length > 0 && <select className="btn" value="" onChange={(e) => { const v = views[Number(e.target.value)]; if (v) sceneRegistry.scene?.applyView(v); }}><option value="">Saved views…</option>{views.map((v, i) => <option key={i} value={i}>{v.name}</option>)}</select>}
+      <select className="btn" value={cameraMode} onChange={(e) => setCameraMode(e.target.value as CameraMode)} title="Camera mode">{CAMS.map(([k, l]) => <option key={k} value={k} disabled={(k === 'follow' || k === 'closeup') && !selectedId}>{l}</option>)}</select>
+      <button className="btn btn-on" disabled={!selectedId} title="Full-screen view of the selected spacecraft model" onClick={() => setModelView(true)}>🛰 Model view</button>
       <div className="flex-1" />
       <span className="text-slate-500 text-[10px] truncate max-w-[260px]" title={scenarioName}>{scenarioName}</span>
       <span className={`text-[10px] px-1.5 rounded border ${presentation ? 'text-fuchsia-300 border-fuchsia-700' : 'text-slate-400 border-edge'}`}>{presentation ? 'PRESENTATION' : 'ENGINEERING'}</span>

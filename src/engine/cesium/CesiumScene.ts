@@ -45,7 +45,7 @@ interface Sat3D {
 
 interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartesian3; coneRadius: { v: number } }
 
-export type CameraMode = 'earth' | 'follow' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual';
+export type CameraMode = 'earth' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual';
 export interface CameraContext { stationId: string | null; secondId: string | null }
 export interface SavedView { name: string; position: [number, number, number]; direction: [number, number, number]; up: [number, number, number] }
 
@@ -289,7 +289,10 @@ export class CesiumScene {
     this.camMode = mode; this.camCtx = ctx;
     v.trackedEntity = undefined;
     v.camera.lookAtTransform(Matrix4.IDENTITY);
-    if (mode === 'follow' && this.selectedId && this.sats.has(this.selectedId)) v.trackedEntity = this.sats.get(this.selectedId)!.entity;
+    // camera distance from the model in units of its bounding radius: follow ≈ 5R (context), closeup ≈ 2.3R (model fills the view)
+    const mult = mode === 'closeup' ? 2.3 : 5;
+    for (const s3 of this.sats.values()) if (s3.entity.model) { const r = modelUrl(s3.kind!).radius; s3.entity.viewFrom = new ConstantProperty(mode === 'closeup' ? new Cartesian3(r * mult * 0.75, -r * mult * 0.9, r * mult * 0.55) : new Cartesian3(0, -r * mult, r * mult * 0.5)); }
+    if ((mode === 'follow' || mode === 'closeup') && this.selectedId && this.sats.has(this.selectedId)) v.trackedEntity = this.sats.get(this.selectedId)!.entity;
     else if (mode === 'earth') v.camera.flyTo({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7), duration: 1.2 });
   }
 
@@ -382,7 +385,7 @@ export class CesiumScene {
       // true-size model that never shrinks below ~64 px, so it is visible from orbit-scale distances and detailed when zoomed in
       entity.model = new ModelGraphics({ uri: m.url, minimumPixelSize: 64, maximumScale: 20000, scale: 1, runAnimations: false });
       entity.orientation = new ConstantProperty(Quaternion.IDENTITY);
-      entity.viewFrom = new ConstantProperty(new Cartesian3(0, -m.radius * 5, m.radius * 2.5));
+      entity.viewFrom = new ConstantProperty(new Cartesian3(0, -m.radius * 5, m.radius * 2.5)); // replaced per camera mode
     }
     const s3: Sat3D = { sat, light, kind, entity, pos, extras: [], arrays, entities: {}, cache: null, links: new Map() };
     if (light) return s3;

@@ -1,16 +1,13 @@
 import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Toolbar } from '@/components/layout/Toolbar';
 import { LeftPanel } from '@/components/panels/LeftPanel';
-import { RightPanel } from '@/components/panels/RightPanel';
+import { RightDock } from '@/components/layout/RightDock';
+import { ResizeHandle } from '@/components/layout/ResizeHandle';
+import { ModelViewOverlay } from '@/components/layout/ModelViewOverlay';
 import { TimelineBar } from '@/components/timeline/TimelineBar';
 import { OrbitCharts } from '@/components/charts/OrbitCharts';
 import { AccessPanel } from '@/components/panels/AccessPanel';
-import { ManeuverPanel } from '@/components/panels/ManeuverPanel';
-import { ConjunctionPanel } from '@/components/panels/ConjunctionPanel';
-import { EventsPanel } from '@/components/panels/EventsPanel';
-import { CoveragePanel } from '@/components/panels/CoveragePanel';
 import { TelemetryPanel } from '@/components/panels/TelemetryPanel';
-import { ReportPanel } from '@/components/panels/ReportPanel';
 import { StationDialog } from '@/components/dialogs/StationDialog';
 import { ImportDialog } from '@/components/dialogs/ImportDialog';
 import { ScenarioDialog } from '@/components/dialogs/ScenarioDialog';
@@ -24,7 +21,7 @@ import { ecefToGeodetic, eciToEcef } from '@/engine/orbital/frames';
 // Cesium is large: load it as its own chunk so the shell paints first.
 const CesiumView = lazy(() => import('@/components/layout/CesiumView').then((m) => ({ default: m.CesiumView })));
 
-const TABS: [BottomTab, string][] = [['orbit', 'Orbit charts'], ['access', 'Ground access'], ['maneuver', 'Maneuvers'], ['conjunction', 'Conjunction'], ['events', 'Events'], ['coverage', 'Coverage'], ['telemetry', 'Telemetry'], ['report', 'Reports']];
+const BOTTOM_TABS: [BottomTab, string][] = [['orbit', 'Orbit charts'], ['access', 'Ground access'], ['telemetry', 'Telemetry (sim.)']];
 
 function PresentationOverlay() {
   const { satellites, selectedId, events, setCameraMode } = useStore();
@@ -49,40 +46,45 @@ function PresentationOverlay() {
 }
 
 export function App() {
-  const { panels, bottomTab, setBottomTab, presentation, uiHidden, toast, notify } = useStore();
-  const hide = uiHidden;
+  const { panels, sizes, setSize, bottomTab, setBottomTab, presentation, uiHidden, modelView, toast, notify } = useStore();
+  const bare = uiHidden || presentation || modelView; // canvas-only layouts
   useEffect(() => { if (toast) { const id = setTimeout(() => notify(null), 3500); return () => clearTimeout(id); } }, [toast, notify]);
+  useEffect(() => { // Esc leaves model view / presentation
+    const f = (e: KeyboardEvent) => { if (e.key === 'Escape') { const s = useStore.getState(); if (s.modelView) s.setModelView(false); else if (s.presentation) s.setPresentation(false); } };
+    window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f);
+  }, []);
   return (
-    <div className="h-full flex flex-col">
-      {!hide && !presentation && <Toolbar />}
-      {!hide && presentation && <button className="absolute top-2 right-2 z-40 btn" onClick={() => useStore.getState().setPresentation(false)}>Exit presentation</button>}
-      <div className="flex-1 flex min-h-0 relative">
-        {!hide && panels.left && <LeftPanel />}
-        <div className="flex-1 relative min-w-0">
-          <Suspense fallback={<div className="p-4 text-slate-400">Loading 3D engine…</div>}><CesiumView /></Suspense>
-          {presentation && !hide && <PresentationOverlay />}
-        </div>
-        {!hide && panels.right && <RightPanel />}
-        <ImportDialog /><StationDialog /><ScenarioDialog /><CaptureDialog /><EventEditor />
-        {toast && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-panel border border-accent text-slate-100 px-3 py-1.5 rounded z-50">{toast}</div>}
-      </div>
-      {!hide && !presentation && (
-        <div className="shrink-0 bg-panel border-t border-edge">
-          <TimelineBar />
-          {panels.bottom && (
-            <>
-              <div className="flex gap-1 px-2 pt-1 bg-panel overflow-x-auto">
-                {TABS.map(([k, l]) => <button key={k} className={`px-3 py-0.5 text-[11px] border-b-2 whitespace-nowrap ${bottomTab === k ? 'text-accent border-accent' : 'text-slate-500 border-transparent'}`} onClick={() => setBottomTab(k)}>{l}</button>)}
-              </div>
-              <div className="h-56">
-                {bottomTab === 'orbit' && <OrbitCharts />}{bottomTab === 'access' && <AccessPanel />}{bottomTab === 'maneuver' && <ManeuverPanel />}
-                {bottomTab === 'conjunction' && <ConjunctionPanel />}{bottomTab === 'events' && <EventsPanel />}{bottomTab === 'coverage' && <CoveragePanel />}
-                {bottomTab === 'telemetry' && <TelemetryPanel />}{bottomTab === 'report' && <ReportPanel />}
-              </div>
-            </>
+    <div className="h-full flex flex-col relative">
+      {!bare && <Toolbar />}
+      <div className="flex-1 flex min-h-0">
+        {!bare && panels.left && <><aside style={{ width: sizes.left }} className="shrink-0 min-h-0 border-r border-edge"><LeftPanel /></aside><ResizeHandle dir="x" onDrag={(d) => setSize('left', sizes.left + d)} /></>}
+        <main className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-h-0 relative">
+            <Suspense fallback={<div className="p-4 text-slate-400">Loading 3D engine…</div>}><CesiumView /></Suspense>
+            {presentation && !uiHidden && <><PresentationOverlay /><button className="absolute top-2 right-2 z-40 btn" onClick={() => useStore.getState().setPresentation(false)}>Exit presentation</button></>}
+            {modelView && !uiHidden && <ModelViewOverlay />}
+          </div>
+          {!bare && (
+            <div className="shrink-0 bg-panel border-t border-edge">
+              <TimelineBar />
+              {panels.bottom && (
+                <>
+                  <ResizeHandle dir="y" onDrag={(d) => setSize('bottom', sizes.bottom - d)} />
+                  <div className="flex gap-1 px-2 pt-1 overflow-x-auto">
+                    {BOTTOM_TABS.map(([k, l]) => <button key={k} className={`px-3 py-0.5 text-[11px] border-b-2 whitespace-nowrap ${bottomTab === k ? 'text-accent border-accent' : 'text-slate-500 border-transparent'}`} onClick={() => setBottomTab(k)}>{l}</button>)}
+                  </div>
+                  <div style={{ height: sizes.bottom }} className="overflow-hidden">
+                    {bottomTab === 'orbit' && <OrbitCharts />}{bottomTab === 'access' && <AccessPanel />}{bottomTab === 'telemetry' && <TelemetryPanel />}
+                  </div>
+                </>
+              )}
+            </div>
           )}
-        </div>
-      )}
+        </main>
+        {!bare && panels.right && <><ResizeHandle dir="x" onDrag={(d) => setSize('right', sizes.right - d)} /><aside style={{ width: sizes.right }} className="shrink-0 min-h-0 border-l border-edge"><RightDock /></aside></>}
+      </div>
+      <ImportDialog /><StationDialog /><ScenarioDialog /><CaptureDialog /><EventEditor />
+      {toast && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-panel border border-accent text-slate-100 px-3 py-1.5 rounded z-50">{toast}</div>}
     </div>
   );
 }
