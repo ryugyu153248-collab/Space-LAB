@@ -58,7 +58,7 @@ interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartes
 
 export type CameraMode = 'earth' | 'leo' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual' | 'coverage' | 'thailand';
 /** Default viewpoint: Thailand (Bangkok). */
-const THAI = { lon: 100.5, lat: 13.75, overview: 1.6e7, close: 2.2e6 };
+const THAI = { lon: 100.5, lat: 13.75, overview: 1.9e7, close: 2.2e6 };
 export interface CameraContext { stationId: string | null; secondId: string | null }
 export interface SavedView { name: string; position: [number, number, number]; direction: [number, number, number]; up: [number, number, number] }
 

@@ -53,13 +53,12 @@ export function Toolbar() {
         {(['left', 'right', 'bottom'] as const).map((k) => <Item key={k} onClick={() => togglePanel(k)}>{panels[k] ? 'Hide' : 'Show'} {k} panel</Item>)}
         <Item onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen?.(); }}>Browser full screen</Item></>}</Menu>
       <div className="w-px h-5 bg-edge mx-2" />
-      <button className="btn" onClick={() => setDialog('import')}>+ Satellite</button>
       <select className="btn" value={cameraMode} onChange={(e) => setCameraMode(e.target.value as CameraMode)} title="Camera mode">{CAMS.map(([k, l]) => <option key={k} value={k} disabled={(k === 'follow' || k === 'closeup' || k === 'leo') && !selectedId}>{l}</option>)}</select>
-      <button className="btn" title="Hide / show all panels (full-screen globe)" onClick={() => { const all = panels.left || panels.right || panels.bottom; useStore.setState({ panels: { left: !all, right: !all, bottom: !all } }); }}>⛶ Focus</button>
+      <button className="btn" title="Show / hide all side panels (simple ⇄ engineering layout)" onClick={() => { const any = panels.left || panels.right || panels.bottom; useStore.setState({ panels: { left: !any, right: !any, bottom: !any } }); }}>☰ Panels</button>
       <button className="btn btn-on" disabled={!selectedId} title="Full-screen view of the selected spacecraft model" onClick={() => setModelView(true)}>🛰 Model view</button>
       <div className="flex-1" />
-      <span className="text-slate-500 text-[10px] truncate max-w-[260px]" title={scenarioName}>{scenarioName}</span>
-      <span className={`text-[10px] px-1.5 rounded border ${presentation ? 'text-fuchsia-300 border-fuchsia-700' : 'text-slate-400 border-edge'}`}>{presentation ? 'PRESENTATION' : 'ENGINEERING'}</span>
+      <span className="text-slate-500 text-[10px] truncate max-w-[200px] hidden 2xl:inline" title={scenarioName}>{scenarioName}</span>
+      
       <button className="btn" onClick={() => setDialog('capture')}>● Capture</button>
       <button className={`btn ${presentation ? 'btn-on' : ''}`} onClick={() => setPresentation(!presentation)}>Present</button>
     </div>

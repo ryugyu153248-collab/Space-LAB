@@ -57,7 +57,7 @@ export function RightPanel() {
         <Row label="Latitude" value={deg(g.lat)} unit="° N" />
         <Row label="Longitude" value={deg(g.lon)} unit="° E" />
         <Row label="Altitude" value={km(g.alt)} unit="km" />
-        <div className="sect">State — {st.frame} (inertial, TEME axes)</div>
+        <details className="group"><summary className="sect cursor-pointer select-none hover:text-slate-300">▸ State vector — {st.frame} (inertial)</summary>
         <Row label="X" value={km(st.r[0])} unit="km" />
         <Row label="Y" value={km(st.r[1])} unit="km" />
         <Row label="Z" value={km(st.r[2])} unit="km" />
@@ -66,7 +66,8 @@ export function RightPanel() {
         <Row label="Vz" value={km(st.v[2], 5)} unit="km/s" />
         <Row label="Speed" value={km(norm(st.v), 5)} unit="km/s" />
         <Row label="|r|" value={km(norm(st.r))} unit="km" />
-        <div className="sect">Osculating elements (from r,v)</div>
+        </details>
+        <details><summary className="sect cursor-pointer select-none hover:text-slate-300">▸ Orbital elements (osculating)</summary>
         <Row label="Semi-major axis a" value={km(el.a)} unit="km" />
         <Row label="Eccentricity e" value={fmt(el.e, 6)} />
         <Row label="Inclination i" value={deg(el.i)} unit="°" />
@@ -77,6 +78,7 @@ export function RightPanel() {
         <Row label="Apogee altitude" value={km(d.apogeeAlt)} unit="km" title="Above equatorial radius 6378.137 km" />
         <Row label="Period" value={duration(d.period)} />
         <Row label="Specific energy ε" value={fmt(d.specificEnergy / 1e6, 4)} unit="MJ/kg" />
+        </details>
         <div className="px-3 pt-1 text-[10px] text-slate-500">
           Osculating elements differ from the TLE mean elements (SGP4 uses Kozai/Brouwer means).
         </div>
@@ -94,13 +96,14 @@ export function RightPanel() {
         <Badge tone={sat.origin === 'SIMULATED' ? 'sim' : 'real'}>{sat.origin === 'SIMULATED' ? 'Simulated data' : 'Real element set'}</Badge>
         {age && <Badge tone={age.level === 'fresh' ? 'ok' : age.level === 'aging' ? 'warn' : 'bad'}>{age.level}</Badge>}
       </div>
-      <div className="sect">Source</div>
+      <details><summary className="sect cursor-pointer select-none hover:text-slate-300">▸ Source</summary>
       <Row label="NORAD ID" value={sat.noradId ?? 'n/a (simulated)'} />
       <Row label="Epoch" value={formatUtc(sat.epoch)} />
       {age && <Row label="Epoch offset @ sim time" value={`${age.days >= 0 ? '+' : ''}${age.days.toFixed(2)} d`} />}
       <Row label="Propagator" value={model} />
       {sat.kind !== 'debris' && <Row label="3D model" value={MODEL_LABEL[modelKindFor(sat)]} title="Simplified procedural illustration, not CAD" />}
       <div className="px-3 text-[10px] text-slate-500 leading-snug">{sat.provenance}. Fidelity: {fidelity}.</div>
+      </details>
       {age && age.level === 'stale' && (
         <div className="mx-3 mt-2 p-2 rounded border border-red-700 bg-red-950/40 text-red-300 text-[11px]">
           ⚠ Element set is {Math.abs(age.days).toFixed(1)} days from sim time — predicted position may be off by tens to thousands of km.

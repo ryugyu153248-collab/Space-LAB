@@ -72,7 +72,7 @@ export function LeftPanel() {
         {list.map((s) => {
           const age = s.source.kind === 'tle' ? tleStaleness(s.epoch, clock.time) : null;
           const canRemove = baseSatellites.some((b) => b.id === s.id);
-          const open = openSat[s.id] ?? selectedId === s.id;
+          const open = openSat[s.id] ?? false;
           const kids = [`Propagator: ${s.source.kind === 'tle' ? 'SGP4' : s.source.kind === 'elements' ? 'two-body' : 'numerical'}`, ...(propsOf(s).sensorHalfAngle ? [`Sensor: ${(propsOf(s).sensorHalfAngle! * 180 / Math.PI).toFixed(0)}° half-angle`] : []), ...(s.maneuvers ?? []).map((m) => `Burn: ${m.name}`), ...(s.attitude ?? []).map((a) => `Attitude: ${a.mode}`)];
           return (
             <div key={s.id}>
@@ -120,7 +120,7 @@ export function LeftPanel() {
       <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-widest text-slate-500">Globe manager</div>
       <LookSwitch />
       {GROUPS.map(([title, items], gi) => (
-        <Section key={title} title={title} open={gi < 2}>
+        <Section key={title} title={title} open={gi === 0 && false}>
           {items.map(([k, label]) => (
             <label key={k} className="flex items-center gap-2 px-3 py-[3px] cursor-pointer hover:bg-slate-800/40"><input type="checkbox" checked={layers[k]} onChange={() => toggleLayer(k)} /><span>{label}</span></label>
           ))}

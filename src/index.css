@@ -15,3 +15,7 @@ input[type=range] { accent-color: #38bdf8; }
 .stack-panel > div:first-child { display: block !important; height: auto !important; overflow: visible !important; }
 .stack-panel > div:first-child > div { width: 100% !important; min-width: 0 !important; max-height: none !important; overflow: visible !important; border-right: 0 !important; border-bottom: 1px solid #1e293b; }
 .stack-panel table { font-size: 11px; }
+
+/* collapsible sections: one custom arrow only */
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }

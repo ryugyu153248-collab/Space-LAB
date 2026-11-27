@@ -112,6 +112,7 @@ export const LOOK_PRESETS: Record<EarthLook, Partial<Layers>> = {
   cinematic: { borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
 };
 
+let savedPanels = { left: false, right: false, bottom: false };
 const STATION_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#06b6d4'];
 const rid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -130,7 +131,7 @@ export const useStore = create<State>((set, get) => ({
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
   layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.schematic } as Layers, clock: clock.snapshot(), cameraMode: 'earth', views: [],
-  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'schematic', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
+  panels: { left: false, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'schematic', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,
   presentation: false, uiHidden: false, toast: null,
 
@@ -201,7 +202,10 @@ export const useStore = create<State>((set, get) => ({
   setTarget: (target) => set({ target }),
   setPickMode: (pickMode) => set({ pickMode }),
   setConjunctionPair: (conjunctionPair) => set({ conjunctionPair }),
-  setPresentation: (presentation) => set((s) => ({ presentation, panels: presentation ? { left: false, right: false, bottom: false } : s.panels.left || s.panels.right ? s.panels : { left: true, right: true, bottom: true } })),
+  setPresentation: (presentation) => set((s) => {
+    if (presentation) { savedPanels = s.panels; return { presentation, panels: { left: false, right: false, bottom: false } }; }
+    return { presentation, panels: savedPanels }; // back to the layout the user had before presenting
+  }),
   setUiHidden: (uiHidden) => set({ uiHidden }),
   notify: (toast) => set({ toast }),
 
