@@ -2,7 +2,7 @@ import {
   Cartesian2, Cartesian3, CallbackProperty, Color, ColorMaterialProperty, ConstantPositionProperty, Entity, HeightReference,
   ImageryLayer, Ion, Matrix4, ModelGraphics, ConstantProperty, JulianDate, LabelStyle, PolygonHierarchy, PolylineDashMaterialProperty, Rectangle, ScreenSpaceEventHandler,
   ScreenSpaceEventType, SingleTileImageryProvider, Terrain, TileMapServiceImageryProvider, VerticalOrigin, Viewer, buildModuleUrl,
-  createWorldImageryAsync, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
+  createWorldImageryAsync, ArcGisMapServerImageryProvider, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
 } from 'cesium';
 import type { GroundStation, Maneuver, Satellite, Vec3 } from '@/types';
 import type { SimulationClock } from '../simulation/SimulationClock';
@@ -66,6 +66,7 @@ export class CesiumScene {
   private layers: Layers | null = null;
   private handler: ScreenSpaceEventHandler;
   private disposed = false;
+  private hidden = new Set<string>();
   private hires: ImageryLayer | null = null;
   private lights: ImageryLayer | null = null;
   private camMode: CameraMode = 'earth';
@@ -77,7 +78,7 @@ export class CesiumScene {
   private conjEntity: { entity: Entity; arr: Cartesian3[]; ids: [string, string] } | null = null;
   private saa: Entity;
   // selected-satellite decorations
-  private fx: { burnVec: Entity; plume: Entity; axes: Entity[]; cone: Entity[]; foot: Entity; footPts: Cartesian3[]; burnArr: Cartesian3[]; plumeArr: Cartesian3[]; axArr: Cartesian3[][]; coneArr: Cartesian3[][] };
+  private fx: { sunVec: Entity; sunArr: Cartesian3[]; axLabels: Entity[]; burnVec: Entity; plume: Entity; axes: Entity[]; cone: Entity[]; foot: Entity; footPts: Cartesian3[]; burnArr: Cartesian3[]; plumeArr: Cartesian3[]; axArr: Cartesian3[][]; coneArr: Cartesian3[][] };
   private overlayProvider: (() => Overlay) | null = null;
   private composite: HTMLCanvasElement | null = null;
   private shotResolve: ((b: Blob) => void) | null = null;
@@ -102,13 +103,13 @@ export class CesiumScene {
     const provider = token ? createWorldImageryAsync() : TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII'));
     v.imageryLayers.add(ImageryLayer.fromProviderAsync(provider as Promise<never>));
     if (!token) {
-      // Free NASA GIBS layers drawn over the offline base (public tiles, no key). If the network blocks them the offline base remains.
-      const gibs = (layer: string, ext: string, credit: string) => new ImageryLayer(new UrlTemplateImageryProvider({
-        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.${ext}`,
-        tilingScheme: new WebMercatorTilingScheme(), maximumLevel: 8, credit,
+      // Sharp satellite imagery without any key: Esri World Imagery (zoom to street level) over the offline base, plus NASA GIBS city
+      // lights on the night side. If the network blocks them, the offline NaturalEarthII base remains visible.
+      this.hires = ImageryLayer.fromProviderAsync(ArcGisMapServerImageryProvider.fromUrl('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer', { enablePickFeatures: false }));
+      this.lights = new ImageryLayer(new UrlTemplateImageryProvider({
+        url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png',
+        tilingScheme: new WebMercatorTilingScheme(), maximumLevel: 8, credit: 'NASA GIBS – VIIRS Black Marble',
       }));
-      this.hires = gibs('BlueMarble_ShadedRelief_Bathymetry', 'jpeg', 'NASA GIBS – Blue Marble');
-      this.lights = gibs('VIIRS_Black_Marble', 'png', 'NASA GIBS – VIIRS Black Marble');
       this.lights.dayAlpha = 0; this.lights.nightAlpha = 1;
       v.imageryLayers.add(this.hires); v.imageryLayers.add(this.lights);
     }
@@ -120,7 +121,7 @@ export class CesiumScene {
     scene.highDynamicRange = false;
     scene.fog.enabled = false;
     scene.globe.depthTestAgainstTerrain = false;
-    scene.globe.maximumScreenSpaceError = 1.5;
+    scene.globe.maximumScreenSpaceError = 1.2;
     scene.globe.atmosphereLightIntensity = 14;
     scene.postProcessStages.fxaa.enabled = true;
     const bloom = scene.postProcessStages.bloom;
@@ -141,7 +142,13 @@ export class CesiumScene {
     const axArr = [0, 1, 2].map(() => [Cartesian3.ZERO, Cartesian3.ZERO]);
     const coneArr = [0, 1, 2, 3].map(() => [Cartesian3.ZERO, Cartesian3.ZERO]);
     const footPts: Cartesian3[] = [];
+    const sunArr: Cartesian3[] = [Cartesian3.ZERO, Cartesian3.ZERO];
+    const tag = (text: string, color: Color, get: () => Cartesian3) => v.entities.add({
+      position: new CallbackProperty(get, false) as never,
+      label: { text, font: '12px ui-monospace, monospace', fillColor: color, style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, outlineColor: Color.BLACK, pixelOffset: new Cartesian2(0, -10), disableDepthTestDistance: 1e9 }, show: false,
+    });
     this.fx = {
+      sunArr, sunVec: line(Color.GOLD, 2, () => sunArr), axLabels: [tag('Body X', Color.RED, () => axArr[0][1]), tag('Body Y', Color.LIME, () => axArr[1][1]), tag('Body Z (nadir)', Color.DODGERBLUE, () => axArr[2][1]), tag('Sun', Color.GOLD, () => sunArr[1])],
       burnArr, plumeArr, axArr, coneArr, footPts,
       burnVec: line(Color.YELLOW, 3, () => burnArr), plume: line(Color.ORANGE, 9, () => plumeArr),
       axes: [Color.RED, Color.LIME, Color.DODGERBLUE].map((c, i) => line(c, 3, () => axArr[i])),
@@ -216,7 +223,7 @@ export class CesiumScene {
       if (e.nadirLine) e.nadirLine.show = e.nadirPoint!.show = l.nadirLine;
       if (e.ghost) e.ghost.show = l.orbits;
     }
-    for (const g of this.stns.values()) { g.entity.show = l.stations; g.cone.show = l.stations && l.visibilityCones; }
+    for (const g of this.stns.values()) { const on = l.stations && !this.hidden.has(g.stn.id); g.entity.show = on; g.cone.show = on && l.visibilityCones; }
     this.saa.show = l.saa;
     if (this.hires) this.hires.show = l.hiresImagery;
     if (this.lights) this.lights.show = l.cityLights;
@@ -228,6 +235,9 @@ export class CesiumScene {
     this.selectedId = id;
     for (const [sid, s] of this.sats) if (s.entity.point && !s.light) s.entity.point.pixelSize = (sid === id ? 12 : 8) as never;
   }
+
+  /** Object-browser visibility: ids of satellites / stations switched off individually. */
+  setHidden(ids: string[]): void { this.hidden = new Set(ids); if (this.layers) this.setLayers(this.layers); }
 
   setPickMode(b: boolean): void { this.pickMode = b; this.viewer.scene.canvas.style.cursor = b ? 'crosshair' : ''; }
 
@@ -422,7 +432,7 @@ export class CesiumScene {
 
     for (const s3 of this.sats.values()) {
       const st = propagateSatellite(s3.sat, t);
-      if (!st) { s3.entity.show = false; for (const e of Object.values(s3.entities)) if (e) e.show = false; continue; }
+      if (!st || this.hidden.has(s3.sat.id)) { s3.entity.show = false; for (const e of Object.values(s3.entities)) if (e) e.show = false; for (const l of s3.links.values()) l.entity.show = false; continue; }
       const rE = eciToEcef(st.r, t);
       const cart = new Cartesian3(rE[0], rE[1], rE[2]);
       s3.pos.setValue(cart);
@@ -483,7 +493,7 @@ export class CesiumScene {
   private updateSelectedFx(t: number, states: Map<string, { rE: Vec3; cart: Cartesian3 }>): void {
     const fx = this.fx, s3 = this.selectedId ? this.sats.get(this.selectedId) : undefined;
     const cur = s3 ? states.get(s3.sat.id) : undefined;
-    const hide = () => { fx.burnVec.show = fx.plume.show = fx.foot.show = false; fx.axes.forEach((a) => (a.show = false)); fx.cone.forEach((a) => (a.show = false)); };
+    const hide = () => { fx.sunVec.show = false; fx.axLabels.forEach((a) => (a.show = false)); fx.burnVec.show = fx.plume.show = fx.foot.show = false; fx.axes.forEach((a) => (a.show = false)); fx.cone.forEach((a) => (a.show = false)); };
     if (!s3 || !cur || s3.light) return hide();
     const st = propagateSatellite(s3.sat, t);
     if (!st) return hide();
@@ -501,8 +511,12 @@ export class CesiumScene {
     }
     // attitude axes & sensor
     const q = attitudeAt(s3.sat.attitude, t, (tt): AttitudeContext | null => { const s = propagateSatellite(s3.sat, tt); return s ? { r: s.r, v: s.v, sunEci: sunPositionEci(tt), utcMs: tt } : null; });
-    const showAx = !!q && (L?.bodyAxes ?? true);
+    // body axes, Sun vector and their labels only make sense when the camera is near the spacecraft
+    const showAx = !!q && (L?.bodyAxes ?? true) && (this.camMode === 'follow' || this.camMode === 'closeup');
     fx.axes.forEach((a) => (a.show = showAx));
+    fx.axLabels.forEach((a) => (a.show = showAx));
+    fx.sunVec.show = showAx;
+    if (showAx) { const sd = rot(sunPositionEci(t)); const sn = Math.hypot(...sd); fx.sunArr[0] = P; fx.sunArr[1] = add([sd[0] / sn, sd[1] / sn, sd[2] / sn], 900_000); }
     if (q && showAx) ([[1, 0, 0], [0, 1, 0], [0, 0, 1]] as Vec3[]).forEach((ax, i) => { fx.axArr[i][0] = P; fx.axArr[i][1] = add(rot(quatRotate(q, ax)), 700_000); });
     const alpha = propsOf(s3.sat).sensorHalfAngle;
     const showSensor = !!q && !!alpha && (L?.footprints ?? true);

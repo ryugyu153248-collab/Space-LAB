@@ -8,7 +8,7 @@ import { useStore } from '@/stores/store';
 export function CesiumView() {
   const ref = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CesiumScene | null>(null);
-  const { satellites, stations, layers, selectedId, secondId, selectedStationId, cameraMode, events, target, conjunctionPair, heatmap, pickMode } = useStore();
+  const { satellites, stations, layers, selectedId, secondId, selectedStationId, cameraMode, events, target, conjunctionPair, heatmap, pickMode, hidden } = useStore();
 
   useEffect(() => {
     let last = 0;
@@ -41,6 +41,7 @@ export function CesiumView() {
   useEffect(() => { sceneRef.current?.setEvents(events, satellites); sceneRef.current?.setLayers(useStore.getState().layers); }, [events, satellites]);
   useEffect(() => { sceneRef.current?.select(selectedId); }, [selectedId, satellites]);
   useEffect(() => { sceneRef.current?.setCameraMode(cameraMode, { stationId: selectedStationId, secondId }); }, [cameraMode, selectedId, secondId, selectedStationId]);
+  useEffect(() => { sceneRef.current?.setHidden(Object.keys(hidden).filter((k) => hidden[k])); }, [hidden, satellites, stations]);
   useEffect(() => { sceneRef.current?.setTarget(target); }, [target]);
   useEffect(() => { sceneRef.current?.setConjunction(conjunctionPair); }, [conjunctionPair]);
   useEffect(() => { sceneRef.current?.setHeatmap(heatmap?.canvas ?? null, heatmap?.rect); sceneRef.current?.setLayers(useStore.getState().layers); }, [heatmap]);

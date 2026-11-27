@@ -20,6 +20,12 @@ npm run build      # type-check + production build -> dist/
 
 No backend or database is needed: scenarios are stored in the browser (IndexedDB) and can be exported/imported as JSON files (schema-versioned).
 
+## Workspace (STK-style)
+Object browser tree (per-object show/hide) · 3D window + 2D map window (ground tracks, footprints, day/night terminator, click = target) ·
+Timeline view (sunlight/umbra, access, burns, events, TCA bars with draggable cursor) · right dock with Info / Maneuver / Conjunction / Events / Coverage / Reports ·
+full-screen Model view. Imagery: Esri World Imagery (keyless, online) over the offline base; set `VITE_CESIUM_ION_TOKEN` to use Cesium imagery + terrain instead.
+Note: Esri World Imagery is subject to Esri's terms of use/attribution — switch it off (Layers) or use a Cesium Ion token for commercial deployments.
+
 ## What is implemented
 | Phase | Features |
 |---|---|

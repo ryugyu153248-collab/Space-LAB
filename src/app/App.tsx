@@ -5,6 +5,8 @@ import { RightDock } from '@/components/layout/RightDock';
 import { ResizeHandle } from '@/components/layout/ResizeHandle';
 import { ModelViewOverlay } from '@/components/layout/ModelViewOverlay';
 import { TimelineBar } from '@/components/timeline/TimelineBar';
+import { Map2D } from '@/components/layout/Map2D';
+import { TimelineView } from '@/components/timeline/TimelineView';
 import { OrbitCharts } from '@/components/charts/OrbitCharts';
 import { AccessPanel } from '@/components/panels/AccessPanel';
 import { TelemetryPanel } from '@/components/panels/TelemetryPanel';
@@ -21,7 +23,7 @@ import { ecefToGeodetic, eciToEcef } from '@/engine/orbital/frames';
 // Cesium is large: load it as its own chunk so the shell paints first.
 const CesiumView = lazy(() => import('@/components/layout/CesiumView').then((m) => ({ default: m.CesiumView })));
 
-const BOTTOM_TABS: [BottomTab, string][] = [['orbit', 'Orbit charts'], ['access', 'Ground access'], ['telemetry', 'Telemetry (sim.)']];
+const BOTTOM_TABS: [BottomTab, string][] = [['timeline', 'Timeline view'], ['orbit', 'Orbit charts'], ['access', 'Ground access'], ['telemetry', 'Telemetry (sim.)']];
 
 function PresentationOverlay() {
   const { satellites, selectedId, events, setCameraMode } = useStore();
@@ -46,7 +48,7 @@ function PresentationOverlay() {
 }
 
 export function App() {
-  const { panels, sizes, setSize, bottomTab, setBottomTab, presentation, uiHidden, modelView, toast, notify } = useStore();
+  const { panels, sizes, setSize, bottomTab, setBottomTab, presentation, uiHidden, modelView, toast, notify, mapMode, setMapMode } = useStore();
   const bare = uiHidden || presentation || modelView; // canvas-only layouts
   useEffect(() => { if (toast) { const id = setTimeout(() => notify(null), 3500); return () => clearTimeout(id); } }, [toast, notify]);
   useEffect(() => { // Esc leaves model view / presentation
@@ -59,10 +61,14 @@ export function App() {
       <div className="flex-1 flex min-h-0">
         {!bare && panels.left && <><aside style={{ width: sizes.left }} className="shrink-0 min-h-0 border-r border-edge"><LeftPanel /></aside><ResizeHandle dir="x" onDrag={(d) => setSize('left', sizes.left + d)} /></>}
         <main className="flex-1 min-w-0 flex flex-col">
-          <div className="flex-1 min-h-0 relative">
-            <Suspense fallback={<div className="p-4 text-slate-400">Loading 3D engine…</div>}><CesiumView /></Suspense>
-            {presentation && !uiHidden && <><PresentationOverlay /><button className="absolute top-2 right-2 z-40 btn" onClick={() => useStore.getState().setPresentation(false)}>Exit presentation</button></>}
-            {modelView && !uiHidden && <ModelViewOverlay />}
+          <div className="flex-1 min-h-0 flex">
+            <div className={`relative min-w-0 ${mapMode === '2d' && !bare ? 'hidden' : 'flex-1'}`}>
+              <Suspense fallback={<div className="p-4 text-slate-400">Loading 3D engine…</div>}><CesiumView /></Suspense>
+              {presentation && !uiHidden && <><PresentationOverlay /><button className="absolute top-2 right-2 z-40 btn" onClick={() => useStore.getState().setPresentation(false)}>Exit presentation</button></>}
+              {modelView && !uiHidden && <ModelViewOverlay />}
+              {!bare && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}
+            </div>
+            {!bare && mapMode !== '3d' && <>{mapMode === 'split' && <ResizeHandle dir="x" onDrag={(d) => setSize('map', sizes.map - d)} />}<div style={mapMode === 'split' ? { width: sizes.map } : undefined} className={`min-w-0 relative ${mapMode === '2d' ? 'flex-1' : 'shrink-0'}`}><Map2D />{mapMode === '2d' && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}</div></>}
           </div>
           {!bare && (
             <div className="shrink-0 bg-panel border-t border-edge">
@@ -74,7 +80,7 @@ export function App() {
                     {BOTTOM_TABS.map(([k, l]) => <button key={k} className={`px-3 py-0.5 text-[11px] border-b-2 whitespace-nowrap ${bottomTab === k ? 'text-accent border-accent' : 'text-slate-500 border-transparent'}`} onClick={() => setBottomTab(k)}>{l}</button>)}
                   </div>
                   <div style={{ height: sizes.bottom }} className="overflow-hidden">
-                    {bottomTab === 'orbit' && <OrbitCharts />}{bottomTab === 'access' && <AccessPanel />}{bottomTab === 'telemetry' && <TelemetryPanel />}
+                    {bottomTab === 'timeline' && <TimelineView />}{bottomTab === 'orbit' && <OrbitCharts />}{bottomTab === 'access' && <AccessPanel />}{bottomTab === 'telemetry' && <TelemetryPanel />}
                   </div>
                 </>
               )}
