@@ -13,7 +13,7 @@ import type { CameraMode } from '@/engine/cesium/CesiumScene';
 import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from '@/engine/cesium/style';
 import type { ModelStyle } from '@/engine/cesium/models/templates';
 
-export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights' | 'terrain' | 'clouds' | 'sun' | 'moon' | 'stars' | 'eclipseShadow' | 'velocityVector' | 'graticule', boolean>;
+export type Layers = Record<'satellites' | 'labels' | 'orbits' | 'groundTracks' | 'nadirLine' | 'atmosphere' | 'lighting' | 'stations' | 'visibilityCones' | 'commLinks' | 'debris' | 'saa' | 'coverage' | 'eventEffects' | 'bodyAxes' | 'footprints' | 'conjunction' | 'models' | 'hiresImagery' | 'cityLights' | 'terrain' | 'clouds' | 'sun' | 'moon' | 'stars' | 'eclipseShadow' | 'velocityVector' | 'graticule' | 'borders', boolean>;
 export type { CameraMode };
 export type BottomTab = 'timeline' | 'orbit' | 'access';
 export type MapMode = '3d' | 'split' | '2d';
@@ -107,9 +107,9 @@ interface State {
 
 /** Layer presets applied when the Earth look changes. */
 export const LOOK_PRESETS: Record<EarthLook, Partial<Layers>> = {
-  schematic: { graticule: true, stars: false, sun: false, moon: false, cityLights: false, clouds: false, lighting: false, groundTracks: false, nadirLine: false, atmosphere: true },
-  standard: { graticule: false, stars: true, sun: true, moon: true, cityLights: false, clouds: false, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
-  cinematic: { graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
+  schematic: { borders: true, graticule: false, stars: false, sun: false, moon: false, cityLights: false, clouds: false, lighting: false, groundTracks: false, nadirLine: false, atmosphere: true },
+  standard: { borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: false, clouds: false, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
+  cinematic: { borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
 };
 
 const STATION_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#06b6d4'];
@@ -129,8 +129,8 @@ export const useStore = create<State>((set, get) => ({
   scenarioId: demo.id, scenarioName: demo.name, baseSatellites: demo.satellites, events: demo.events,
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
-  layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.schematic } as Layers, clock: clock.snapshot(), cameraMode: 'closeup', views: [],
-  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'schematic', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: true, dialog: null, editingEvent: null,
+  layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.schematic } as Layers, clock: clock.snapshot(), cameraMode: 'earth', views: [],
+  panels: { left: true, right: true, bottom: true }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'schematic', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,
   presentation: false, uiHidden: false, toast: null,
 

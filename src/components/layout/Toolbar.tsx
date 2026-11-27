@@ -22,7 +22,7 @@ const Item = ({ onClick, children, disabled }: { onClick: () => void; children: 
   <button disabled={disabled} className="block w-full text-left px-3 py-1 hover:bg-slate-800 disabled:opacity-40" onClick={onClick}>{children}</button>
 );
 
-const CAMS: [CameraMode, string][] = [['earth', 'Earth overview'], ['leo', 'Low Earth orbit view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative satellite view (A→B)'], ['dual', 'Dual satellite comparison'], ['coverage', 'Global coverage view'], ['free', 'Free camera']];
+const CAMS: [CameraMode, string][] = [['earth', 'Earth overview (Thailand)'], ['thailand', 'Thailand close view'], ['leo', 'Low Earth orbit view'], ['follow', 'Satellite follow'], ['closeup', 'Model close-up'], ['orbit', 'Orbit view'], ['groundstation', 'Ground station view'], ['relative', 'Relative satellite view (A→B)'], ['dual', 'Dual satellite comparison'], ['coverage', 'Global coverage view'], ['free', 'Free camera']];
 const TABS: [AnyTab, string][] = [['info', 'Properties (right)'], ['maneuver', 'Maneuvers (right)'], ['conjunction', 'Conjunction & avoidance (right)'], ['events', 'Events (right)'], ['coverage', 'Coverage & targets (right)'], ['report', 'Reports & export (right)'], ['telemetry', 'Telemetry — simulated (right)'], ['orbit', 'Orbit charts (bottom)'], ['access', 'Ground station access (bottom)']];
 
 export function Toolbar() {

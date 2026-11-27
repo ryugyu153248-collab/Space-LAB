@@ -40,7 +40,8 @@ export function CesiumView() {
   useEffect(() => { sceneRef.current?.setLayers(layers); }, [layers, satellites, stations, heatmap]);
   useEffect(() => { sceneRef.current?.setEvents(events, satellites); sceneRef.current?.setLayers(useStore.getState().layers); }, [events, satellites]);
   useEffect(() => { sceneRef.current?.select(selectedId); }, [selectedId, satellites]);
-  useEffect(() => { sceneRef.current?.setCameraMode(cameraMode, { stationId: selectedStationId, secondId }); }, [cameraMode, selectedId, secondId, selectedStationId]);
+  const selKey = ['earth', 'free', 'thailand'].includes(cameraMode) ? '' : `${selectedId}|${secondId}|${selectedStationId}`;
+  useEffect(() => { sceneRef.current?.setCameraMode(cameraMode, { stationId: selectedStationId, secondId }); }, [cameraMode, selKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { sceneRef.current?.setHidden(Object.keys(hidden).filter((k) => hidden[k])); }, [hidden, satellites, stations]);
   useEffect(() => { sceneRef.current?.setTarget(target); }, [target]);
   useEffect(() => { sceneRef.current?.setModelStyle(modelStyle); }, [modelStyle, satellites]);

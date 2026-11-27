@@ -2,7 +2,7 @@ import {
   Cartesian2, Cartesian3, CallbackProperty, Color, ColorMaterialProperty, ConstantPositionProperty, Entity, HeightReference,
   ImageryLayer, Ion, Matrix4, type TerrainProvider, ModelGraphics, ConstantProperty, JulianDate, LabelStyle, PolygonHierarchy, PolylineDashMaterialProperty, Rectangle, ScreenSpaceEventHandler,
   ScreenSpaceEventType, SingleTileImageryProvider, TileMapServiceImageryProvider, VerticalOrigin, Viewer, buildModuleUrl,
-  createWorldImageryAsync, createWorldTerrainAsync, EllipsoidTerrainProvider, ArcGisMapServerImageryProvider, Math as CesiumMath, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
+  createWorldImageryAsync, createWorldTerrainAsync, PolylineCollection, Material, EllipsoidTerrainProvider, ArcGisMapServerImageryProvider, Math as CesiumMath, defined, Ellipsoid, Quaternion, UrlTemplateImageryProvider, WebMercatorTilingScheme, PolylineGlowMaterialProperty,
 } from 'cesium';
 import type { GroundStation, Maneuver, Satellite, Vec3 } from '@/types';
 import type { SimulationClock } from '../simulation/SimulationClock';
@@ -24,6 +24,7 @@ import { createTerrariumProvider } from './terrain';
 import { cloudCanvas } from './clouds';
 import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from './style';
 import { graticuleLines, loadBackground, schematicTexture } from './baseMap';
+import { loadBorders } from './borders';
 
 /**
  * Visualization only. All positions come from the Orbital Engine (propagateSatellite); Cesium never computes physics.
@@ -55,7 +56,9 @@ interface Sat3D {
 
 interface Stn3D { stn: GroundStation; entity: Entity; cone: Entity; ecef: Cartesian3; coneRadius: { v: number } }
 
-export type CameraMode = 'earth' | 'leo' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual' | 'coverage';
+export type CameraMode = 'earth' | 'leo' | 'follow' | 'closeup' | 'free' | 'orbit' | 'groundstation' | 'relative' | 'dual' | 'coverage' | 'thailand';
+/** Default viewpoint: Thailand (Bangkok). */
+const THAI = { lon: 100.5, lat: 13.75, overview: 1.6e7, close: 2.2e6 };
 export interface CameraContext { stationId: string | null; secondId: string | null }
 export interface SavedView { name: string; position: [number, number, number]; direction: [number, number, number]; up: [number, number, number] }
 
@@ -80,6 +83,8 @@ export class CesiumScene {
   private baseLayer: ImageryLayer | null = null;
   private schLayer: ImageryLayer | null = null;
   private graticule: Entity[] = [];
+  private borders: PolylineCollection | null = null;
+  private bordersLoading = false;
   private hires: ImageryLayer | null = null;
   private lights: ImageryLayer | null = null;
   private cloudLayer: ImageryLayer | null = null;
@@ -168,7 +173,8 @@ export class CesiumScene {
     cc.inertiaSpin = 0.94; cc.inertiaTranslate = 0.94; cc.inertiaZoom = 0.88; cc.minimumZoomDistance = 2;
     scene.globe.depthTestAgainstTerrain = false;
     scene.postProcessStages.fxaa.enabled = true;
-    v.camera.setView({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7) });
+    // start over Thailand, north up (full globe disc)
+    v.camera.setView({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, THAI.overview), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 } });
 
     const pts = saaOutline();
     this.saa = v.entities.add({
@@ -291,6 +297,8 @@ export class CesiumScene {
     if (this.hires) this.hires.show = l.hiresImagery && !sch;
     if (this.lights) this.lights.show = l.cityLights && !sch;
     for (const e of this.graticule) e.show = l.graticule;
+    if (l.borders && !this.borders && !this.bordersLoading) this.buildBorders();
+    if (this.borders) this.borders.show = l.borders;
     scene.backgroundColor = sch ? Color.fromCssColorString('#16171b') : Color.BLACK;
     if (this.heatLayer) { this.heatLayer.show = l.coverage; this.heatLayer.alpha = this.style.heatmapOpacity; }
     for (const x of this.effects) x.entity.show = l.eventEffects;
@@ -315,13 +323,27 @@ export class CesiumScene {
     this.setStyle(this.style);
   }
 
+  /** Country boundaries as one PolylineCollection (single draw batch), built lazily from the bundled Natural Earth data. */
+  private buildBorders(): void {
+    this.bordersLoading = true;
+    loadBorders().then((lines) => {
+      if (this.disposed) return;
+      const pc = new PolylineCollection();
+      const mat = Material.fromType('Color', { color: Color.WHITE.withAlpha(0.9) });
+      for (const l of lines) pc.add({ positions: Cartesian3.fromDegreesArrayHeights(l.flatMap(([lo, la]) => [lo, la, 1500])), width: 1.3, material: mat });
+      this.viewer.scene.primitives.add(pc);
+      this.borders = pc;
+      pc.show = this.layers?.borders ?? true;
+    }).catch((e) => { console.error('borders failed', e); this.bordersLoading = false; });
+  }
+
   /** Realistic vs colour-coded subsystem (cut-away) view for models that provide it. */
   setModelStyle(style: ModelStyle): void {
     for (const s of this.sats.values()) if (s.entity.model && s.kind) s.entity.model.uri = new ConstantProperty(modelUrl(s.kind, style).url) as never;
   }
 
   private applyTerrain(): void {
-    const want = this.layers?.terrain ?? true;
+    const want = (this.layers?.terrain ?? true) && this.look !== 'schematic';
     const prov = want && this.terrain ? this.terrain : this.flat;
     if (this.viewer.scene.terrainProvider !== prov) this.viewer.scene.terrainProvider = prov;
   }
@@ -435,7 +457,10 @@ export class CesiumScene {
     const mult = mode === 'closeup' ? 2.3 : 5;
     for (const s3 of this.sats.values()) if (s3.entity.model) { const r = modelUrl(s3.kind!).radius; s3.entity.viewFrom = new ConstantProperty(mode === 'closeup' ? new Cartesian3(r * mult * 0.75, -r * mult * 0.9, r * mult * 0.55) : new Cartesian3(0, -r * mult, r * mult * 0.5)); }
     if ((mode === 'follow' || mode === 'closeup') && this.selectedId && this.sats.has(this.selectedId)) v.trackedEntity = this.sats.get(this.selectedId)!.entity;
-    else if (mode === 'earth') v.camera.flyTo({ destination: Cartesian3.fromDegrees(100, 15, 2.2e7), duration: 1.8 });
+    else if (mode === 'earth' || mode === 'thailand') {
+      // explicit heading/pitch/roll → always north-up (a plain flyTo would keep the previous, possibly rolled, orientation)
+      v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, mode === 'earth' ? THAI.overview : THAI.close), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration: 1.8 });
+    }
     else if (mode === 'leo' || mode === 'coverage') {
       const sel = this.selectedId ? this.sats.get(this.selectedId) : undefined;
       const st = sel ? propagateSatellite(sel.sat, this.clock.time) : null;

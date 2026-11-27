@@ -11,6 +11,7 @@ import { sensorFootprint } from '@/engine/orbital/attitude';
 import { DEG, R_EARTH } from '@/engine/orbital/constants';
 import { norm } from '@/engine/orbital/vec';
 import { loadBackground } from '@/engine/cesium/baseMap';
+import { loadBorders, type BorderLine } from '@/engine/cesium/borders';
 import type { Satellite, Vec3 } from '@/types';
 
 /**
@@ -49,10 +50,12 @@ export function Map2D() {
   const view = useRef({ cLon: 0, cLat: 0, zoom: 1 });
   const cache = useRef(new Map<string, Track>());
   const bg = useRef<HTMLCanvasElement | null>(null);
+  const borders = useRef<BorderLine[] | null>(null);
 
   useEffect(() => {
     let raf = 0, alive = true;
     loadBackground().then((c) => { bg.current = c; });
+    loadBorders().then((b) => { borders.current = b; });
     const cv = ref.current!;
     const ctx = cv.getContext('2d')!;
     let lastKey = '';
@@ -64,7 +67,7 @@ export function Map2D() {
       if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); lastKey = ''; }
       const S = useStore.getState();
       const t = clock.time, v = view.current;
-      const key = `${t}|${v.cLon}|${v.cLat}|${v.zoom}|${w}|${h}|${!!bg.current}|${S.satellites.length}|${S.selectedId}|${S.layers.saa}|${S.heatmap ? 1 : 0}|${S.target?.lat}|${JSON.stringify(S.hidden)}|${S.stations.length}|${S.stations.map((g) => g.minElevation).join()}`;
+      const key = `${t}|${v.cLon}|${v.cLat}|${v.zoom}|${w}|${h}|${!!bg.current}|${!!borders.current}|${S.layers.borders}|${S.satellites.length}|${S.selectedId}|${S.layers.saa}|${S.heatmap ? 1 : 0}|${S.target?.lat}|${JSON.stringify(S.hidden)}|${S.stations.length}|${S.stations.map((g) => g.minElevation).join()}`;
       if (key === lastKey) return;
       lastKey = key;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -88,6 +91,7 @@ export function Map2D() {
       // sub-solar point
       ctx.beginPath(); ctx.arc(X(wrapLon(lonS / DEG)), Y(dec / DEG), 6, 0, 7); ctx.fillStyle = '#facc15'; ctx.fill();
 
+      if (S.layers.borders && borders.current) { ctx.beginPath(); for (const l of borders.current) l.forEach(([lo, la], i) => (i ? ctx.lineTo(X(lo), Y(la)) : ctx.moveTo(X(lo), Y(la)))); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.8; ctx.stroke(); }
       // grid
       ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(148,163,184,0.25)'; ctx.fillStyle = 'rgba(203,213,225,0.7)'; ctx.font = '10px ui-monospace, monospace';
       for (let lon = -180; lon <= 180; lon += 30) { ctx.beginPath(); ctx.moveTo(X(lon), Y(90)); ctx.lineTo(X(lon), Y(-90)); ctx.stroke(); if (lon < 180) ctx.fillText(`${lon}`, X(lon) + 2, Y(-90) - 3); }
