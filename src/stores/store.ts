@@ -131,7 +131,7 @@ const firstDerived = derive(demo.satellites, demo.events);
 export const useStore = create<State>((set, get) => ({
   scenarioId: demo.id, scenarioName: demo.name, baseSatellites: demo.satellites, events: demo.events,
   ...firstDerived,
-  stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
+  stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations.find((g) => g.id === 'gs-spoc')?.id ?? demo.stations[0]?.id ?? null,
   layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.standard } as Layers, clock: clock.snapshot(), cameraMode: 'thailand', views: [],
   panels: { left: true, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,

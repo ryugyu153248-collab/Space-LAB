@@ -1,5 +1,5 @@
 import type { Satellite } from '@/types';
-import { DEMO_T0, bangkokStation, buildCollisionDemoSatellites } from './demoScenario';
+import { DEMO_T0, bangkokStation, buildCollisionDemoSatellites, spocStation } from './demoScenario';
 import { buildDemoSatellites } from './demo';
 import { newEvent } from '../events/EventManager';
 import { screenConjunctions } from '../analysis/conjunction';
@@ -67,6 +67,6 @@ export function buildNapa2Demo(): ScenarioFile {
     props: { massKg: 8, propellantKg: 0.4, cd: 2.2, area: 0.06, sensorHalfAngle: 3 * DEG, panelArea: 0.08, panelEfficiency: 0.3, batteryWh: 40, busLoadW: 8, commLoadW: 6 },
   };
   const f = emptyScenario('NAPA-2 CubeSat — Bangkok contact demo', [sat], DEMO_T0, 1);
-  f.stations = [{ ...bangkokStation('#ef4444') }];
+  f.stations = [{ ...bangkokStation('#ef4444') }, spocStation()];   // Bangkok (brief) + SpOC (default operations station)
   return f;
 }

@@ -8,6 +8,11 @@ export const DEMO_T0 = Date.UTC(2026, 0, 15, 0, 0, 0);
 /** Intended encounter epoch used only to DESIGN the initial states (the analysis then finds the real TCA/miss distance). */
 export const DEMO_ENCOUNTER = DEMO_T0 + 2.5 * 3600_000;
 
+/** SpOC ground station (13.9418° N, 100.5888° E, 10 m, 5° elevation mask) — default operations station of the NAPA-2 scenario. */
+export function spocStation(color = '#f59e0b'): GroundStation {
+  return { id: 'gs-spoc', name: 'SpOC', lat: 13.9418 * DEG, lon: 100.5888 * DEG, alt: 10, minElevation: 5 * DEG, color };
+}
+
 export function bangkokStation(color = '#22c55e'): GroundStation {
   return { id: 'gs-bangkok', name: 'Bangkok Ground Station', lat: 13.7563 * DEG, lon: 100.5018 * DEG, alt: 0, minElevation: 10 * DEG, color };
 }

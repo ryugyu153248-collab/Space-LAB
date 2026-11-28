@@ -109,5 +109,12 @@ describe('NAPA-2 demo scenario', () => {
     const r = computeAccess(f.satellites[0], f.stations[0], f.clock.start, f.clock.end);
     expect(r.passes.length).toBeGreaterThanOrEqual(2);
     expect(f.satellites[0].origin).toBe('SIMULATED');
+    const spoc = f.stations.find((g) => g.id === 'gs-spoc')!;
+    expect(spoc.name).toBe('SpOC');
+    expect(spoc.lat / DEG).toBeCloseTo(13.9418, 4); expect(spoc.lon / DEG).toBeCloseTo(100.5888, 4);
+    expect(spoc.alt).toBe(10); expect(spoc.minElevation / DEG).toBeCloseTo(5, 6);
+    // a lower mask can only add contact time
+    const sp = computeAccess(f.satellites[0], spoc, f.clock.start, f.clock.end);
+    expect(sp.passes.length).toBeGreaterThanOrEqual(r.passes.length);
   });
 });
