@@ -130,11 +130,14 @@ export class CesiumScene {
   private recordChunks: Blob[] = [];
   private recordOverlay = true;
 
-  constructor(container: HTMLElement, private clock: SimulationClock, private hooks: SceneHooks) {
+  private lastW = 0;
+  private lastH = 0;
+
+  constructor(private container: HTMLElement, private clock: SimulationClock, private hooks: SceneHooks) {
     const token = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
     if (token) Ion.defaultAccessToken = token;
 
-    this.viewer = new Viewer(container, {
+    this.viewer = new Viewer(this.container, {
       animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
       navigationHelpButton: false, fullscreenButton: false, infoBox: false, selectionIndicator: false, baseLayer: false,
       requestRenderMode: false,
@@ -221,8 +224,8 @@ export class CesiumScene {
     // keep Thailand centred in the visible 3D block when docks open/close/resize — unless the user has moved the camera themselves
     const unlock = () => { this.homeLocked = false; };
     scene.canvas.addEventListener('pointerdown', unlock); scene.canvas.addEventListener('wheel', unlock, { passive: true });
-    this.ro = new ResizeObserver(() => { clearTimeout(this.roTimer); this.roTimer = window.setTimeout(() => { if (!this.disposed && this.camMode === 'thailand' && this.homeLocked) this.goHome(0.5); }, 200); });
-    this.ro.observe(container);
+    this.ro = new ResizeObserver(() => { clearTimeout(this.roTimer); this.roTimer = window.setTimeout(() => { if (this.disposed || this.container.clientWidth < 50 || this.container.clientHeight < 50) return; if (this.camMode === 'thailand' && this.homeLocked) this.goHome(0.5); }, 200); });
+    this.ro.observe(this.container);
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction((e: { position: Cartesian2 }) => {
       if (this.pickMode) {
@@ -237,6 +240,11 @@ export class CesiumScene {
     const loop = () => {
       if (this.disposed) return;
       this.clock.tick(performance.now());
+      // Cesium only resizes on its own triggers and shrinks the drawing buffer to 0×0 when the container is hidden (e.g. 2D-only map mode);
+      // we drive rendering ourselves, so: don't render while hidden, and restore the buffer as soon as the container is visible again.
+      const w = this.container.clientWidth, h = this.container.clientHeight;
+      if (w < 2 || h < 2) { this.hooks.onFrame(this.clock.time); this.raf = requestAnimationFrame(loop); return; } // hidden: keep the UI clock ticking
+      if (w !== this.lastW || h !== this.lastH || this.viewer.scene.canvas.width < 2) { this.lastW = w; this.lastH = h; this.viewer.resize(); }
       try { this.frame(); } catch (err) { console.error('frame error', err); }
       this.raf = requestAnimationFrame(loop);
     };
