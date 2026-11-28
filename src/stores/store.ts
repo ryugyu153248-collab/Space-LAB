@@ -50,6 +50,7 @@ interface State {
   style: StyleSettings;
   look: EarthLook;
   modelStyle: ModelStyle;
+  advancedPanel: boolean;
   hidden: Record<string, boolean>;
   sizes: { left: number; right: number; bottom: number; map: number };
   modelView: boolean;
@@ -90,6 +91,7 @@ interface State {
   setLook: (l: EarthLook) => void;
   goHome: () => void;
   setModelStyle: (m: ModelStyle) => void;
+  setAdvancedPanel: (b: boolean) => void;
   toggleHidden: (id: string) => void;
   setSize: (k: 'left' | 'right' | 'bottom' | 'map', v: number) => void;
   setModelView: (b: boolean) => void;
@@ -133,7 +135,7 @@ export const useStore = create<State>((set, get) => ({
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations.find((g) => g.id === 'gs-spoc')?.id ?? demo.stations[0]?.id ?? null,
   layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.standard } as Layers, clock: clock.snapshot(), cameraMode: 'thailand', views: [],
-  panels: { left: true, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
+  panels: { left: true, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', modelStyle: 'realistic', advancedPanel: false, hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,
   presentation: false, uiHidden: false, toast: null,
 
@@ -193,6 +195,7 @@ export const useStore = create<State>((set, get) => ({
   setStyle: (p) => set((s) => ({ style: { ...s.style, ...p } })),
   setLook: (look) => set((s) => ({ look, layers: { ...s.layers, ...LOOK_PRESETS[look] } as Layers })),
   setModelStyle: (modelStyle) => set({ modelStyle }),
+  setAdvancedPanel: (advancedPanel) => set({ advancedPanel }),
   goHome: () => { set({ modelView: false, cameraMode: 'thailand' }); sceneRegistry.scene?.goHome(); },
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
   setRightTab: (rightTab) => set({ rightTab, panels: { ...get().panels, right: true } }),

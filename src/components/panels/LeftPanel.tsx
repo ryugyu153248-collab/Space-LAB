@@ -58,7 +58,8 @@ function Eye({ id }: { id: string }) {
   return <button title={hidden ? 'Show' : 'Hide'} onClick={(e) => { e.stopPropagation(); toggle(id); }} className={`w-4 text-center ${hidden ? 'text-slate-600' : 'text-accent'}`}>{hidden ? '○' : '●'}</button>;
 }
 
-export function LeftPanel() {
+/** Full object browser + globe manager (old panel), shown under “ตั้งค่าขั้นสูง”. */
+export function AdvancedLeftPanel() {
   const { satellites, selectedId, secondId, select, setSecond, removeSatellite, baseSatellites, layers, toggleLayer, clock, stations, selectedStationId, selectStation, removeStation, updateStation, setDialog, views, setViews, events, scenarioName, setEditingEvent } = useStore();
   const list = satellites.filter((s) => s.kind !== 'debris');
   const debris = satellites.filter((s) => s.kind === 'debris');
@@ -66,6 +67,7 @@ export function LeftPanel() {
   const row = (active: boolean, depth = 0) => `flex items-center gap-1 pr-2 py-[3px] cursor-pointer border-l-2 ${active ? 'bg-slate-800/70 border-accent' : 'border-transparent hover:bg-slate-800/40'} ${depth ? 'pl-9' : 'pl-3'}`;
   return (
     <div className="h-full bg-panel overflow-y-auto">
+      <button className="w-full text-left px-3 py-2 text-accent hover:bg-slate-800/50 border-b border-edge" onClick={() => useStore.getState().setAdvancedPanel(false)}>← กลับโหมดง่าย (Simple)</button>
       <Section title="Object browser" count={list.length + stations.length + events.length}>
         <div className="px-3 py-1 text-slate-300 flex items-center gap-1">🌐 <span className="truncate">{scenarioName}</span></div>
         <div className="px-3 pt-1 text-[10px] uppercase tracking-widest text-slate-500 flex items-center">Satellites<span className="flex-1" /><button className="btn !py-0" onClick={() => setDialog('import')}>+</button></div>
@@ -140,3 +142,5 @@ export function LeftPanel() {
     </div>
   );
 }
+
+export { SimpleLeftPanel as LeftPanel } from './SimpleLeftPanel';
