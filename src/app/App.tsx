@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Toolbar } from '@/components/layout/Toolbar';
 import { LeftPanel } from '@/components/panels/LeftPanel';
 import { RightDock } from '@/components/layout/RightDock';
-import { ResizeHandle } from '@/components/layout/ResizeHandle';
+import { ResizeHandle, ResizeCorner } from '@/components/layout/ResizeHandle';
 import { ModelViewOverlay } from '@/components/layout/ModelViewOverlay';
 import { ContactBadge } from '@/components/layout/ContactBadge';
 import { TimelineBar } from '@/components/timeline/TimelineBar';
@@ -73,8 +73,18 @@ export function App() {
               {!bare && !panels.right && <button className="absolute right-0 top-1/2 -translate-y-1/2 z-10 btn !rounded-r-none opacity-70 hover:opacity-100" title="Open info & analysis tools" onClick={() => togglePanel('right')}>Info ◂</button>}
               {!bare && !panels.bottom && <button className="absolute left-1/2 -translate-x-1/2 bottom-0 z-10 btn !rounded-b-none opacity-70 hover:opacity-100" title="Open timeline view & charts" onClick={() => togglePanel('bottom')}>▴ Timeline & charts</button>}
               {!bare && <div className="absolute right-2 top-2 flex gap-1 z-10"><button className="btn" title="Back to the start view over Thailand (H)" onClick={() => useStore.getState().goHome()}>⌂ Home</button>{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}
+              {!bare && mapMode === 'split' && (
+                <div style={{ width: sizes.map, aspectRatio: '2 / 1' }} className="absolute right-3 bottom-3 z-20 rounded-md overflow-hidden border border-slate-500/70 shadow-2xl shadow-black/60 bg-black">
+                  <Map2D inset />
+                  <div className="absolute right-1 top-1 flex gap-1 z-10">
+                    <button className="btn !py-0 !px-1.5" title="ขยายเป็นแผนที่เต็มจอ (2D)" onClick={() => setMapMode('2d')}>⤢</button>
+                    <button className="btn !py-0 !px-1.5" title="ปิดแผนที่ย่อ" onClick={() => setMapMode('3d')}>✕</button>
+                  </div>
+                  <ResizeCorner onDrag={(dx) => setSize('map', sizes.map - dx)} />
+                </div>
+              )}
             </div>
-            {!bare && mapMode !== '3d' && <>{mapMode === 'split' && <ResizeHandle dir="x" onDrag={(d) => setSize('map', sizes.map - d)} />}<div style={mapMode === 'split' ? { width: sizes.map } : undefined} className={`min-w-0 relative ${mapMode === '2d' ? 'flex-1' : 'shrink-0'}`}><Map2D />{mapMode === '2d' && <div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div>}</div></>}
+            {!bare && mapMode === '2d' && <><div className="min-w-0 relative flex-1"><Map2D /><div className="absolute right-2 top-2 flex gap-1 z-10">{(['3d', 'split', '2d'] as const).map((m) => <button key={m} className={`btn ${mapMode === m ? 'btn-on' : ''}`} onClick={() => setMapMode(m)}>{m === '3d' ? '3D' : m === '2d' ? '2D' : '3D + 2D'}</button>)}</div></div></>}
           </div>
           {!bare && (
             <div className="shrink-0 bg-panel border-t border-edge">

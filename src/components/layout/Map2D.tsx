@@ -56,7 +56,7 @@ function trackFor(cache: Map<string, Track>, sat: Satellite, t: number): Track |
   return tr;
 }
 
-export function Map2D() {
+export function Map2D({ inset = false }: { inset?: boolean } = {}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const hover = useRef<HTMLDivElement>(null);
   const view = useRef<View>({ cLon: THAI_C.lon, cLat: THAI_C.lat, zoom: 1, init: false });
@@ -85,6 +85,7 @@ export function Map2D() {
       if (key === lastKey) return;
       lastKey = key;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!v.init) { v.init = true; v.zoom = scales(w, h).zoomMin; v.cLon = 0; v.cLat = 0; } // start with the WHOLE world in view
       clampView(v, w, h);
       const k = scales(w, h).cover * v.zoom;
       const X = (lon: number) => w / 2 + (lon - v.cLon) * k, Y = (lat: number) => h / 2 - (lat - v.cLat) * k;
@@ -204,7 +205,7 @@ export function Map2D() {
     v.init = true;
     if (mode === 'world') { v.zoom = zoomMin; v.cLon = 0; v.cLat = 0; }
     else if (mode === 'thai') { v.zoom = Math.max(zoomMin, h / 24 / cover); v.cLon = THAI_C.lon; v.cLat = THAI_C.lat; }
-    else { v.zoom = 1; v.cLon = THAI_C.lon; v.cLat = THAI_C.lat; }
+    else { v.zoom = 1; v.cLon = THAI_C.lon; v.cLat = THAI_C.lat; }  // 'fill'
   };
   return (
     <div className="relative w-full h-full bg-black">
@@ -220,12 +221,11 @@ export function Map2D() {
           if (d.moved) { const r = ref.current!.getBoundingClientRect(), v = view.current, k = scales(r.width, r.height).cover * v.zoom; v.cLon -= dx / k; v.cLat += dy / k; d.x = e.clientX; d.y = e.clientY; }
         }}
         onPointerUp={(e) => { const d = drag.current; drag.current = null; if (d && !d.moved) { const [lo, la] = toLonLat(e); if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) { const s = useStore.getState(); s.setTarget({ lat: la, lon: lo, radiusKm: s.target?.radiusKm }); s.notify(`Target set: ${la.toFixed(2)}°, ${lo.toFixed(2)}°`); } } }}
-        onDoubleClick={() => goto('fill')} />
-      <div className="absolute left-2 top-2 flex items-center gap-1 z-10">
-        <span className="text-[10px] text-slate-300 bg-black/50 rounded px-2 py-1 pointer-events-none">แผนที่ 2D · ล้อเมาส์ซูม · ลากเลื่อน · คลิก = ตั้งเป้าหมาย</span>
-        <button className="btn !py-0.5" onClick={() => goto('thai')}>ไทย</button>
-        <button className="btn !py-0.5" onClick={() => goto('fill')}>เต็มช่อง</button>
-        <button className="btn !py-0.5" onClick={() => goto('world')}>ทั้งโลก</button>
+        onDoubleClick={() => goto('world')} />
+      <div className="absolute left-2 top-2 flex items-center gap-1 z-10" style={inset ? { left: 22 } : undefined}>
+        {!inset && <span className="text-[10px] text-slate-300 bg-black/50 rounded px-2 py-1 pointer-events-none">แผนที่ 2D · ล้อเมาส์ซูม · ลากเลื่อน · คลิก = ตั้งเป้าหมาย</span>}
+        <button className="btn !py-0 !px-1.5 text-[11px]" title="ซูมเข้าประเทศไทย" onClick={() => goto('thai')}>ไทย</button>
+        <button className="btn !py-0 !px-1.5 text-[11px]" title="ดูทั้งโลก" onClick={() => goto('world')}>ทั้งโลก</button>
       </div>
       <div ref={hover} className="absolute left-2 bottom-2 num text-[10px] text-slate-200 bg-black/50 rounded px-2 py-0.5 pointer-events-none">—</div>
     </div>
