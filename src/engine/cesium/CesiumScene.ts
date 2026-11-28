@@ -24,7 +24,7 @@ import { createTerrariumProvider } from './terrain';
 import { cloudCanvas } from './clouds';
 import { DEFAULT_STYLE, type EarthLook, type StyleSettings } from './style';
 import { graticuleLines, loadBackground, schematicTexture } from './baseMap';
-import { loadBorders } from './borders';
+import { loadBorders, loadThailand } from './borders';
 
 /**
  * Visualization only. All positions come from the Orbital Engine (propagateSatellite); Cesium never computes physics.
@@ -88,6 +88,11 @@ export class CesiumScene {
   private schLayer: ImageryLayer | null = null;
   private graticule: Entity[] = [];
   private borders: PolylineCollection | null = null;
+  private thaiLines: PolylineCollection | null = null;
+  private thaiFill: Entity[] = [];
+  private homeLocked = true;
+  private ro: ResizeObserver | null = null;
+  private roTimer = 0;
   private bordersLoading = false;
   private hires: ImageryLayer | null = null;
 
@@ -213,6 +218,11 @@ export class CesiumScene {
     };
 
     this.setLook('standard'); // after the shadow / fx entities exist
+    // keep Thailand centred in the visible 3D block when docks open/close/resize — unless the user has moved the camera themselves
+    const unlock = () => { this.homeLocked = false; };
+    scene.canvas.addEventListener('pointerdown', unlock); scene.canvas.addEventListener('wheel', unlock, { passive: true });
+    this.ro = new ResizeObserver(() => { clearTimeout(this.roTimer); this.roTimer = window.setTimeout(() => { if (!this.disposed && this.camMode === 'thailand' && this.homeLocked) this.goHome(0.5); }, 200); });
+    this.ro.observe(container);
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction((e: { position: Cartesian2 }) => {
       if (this.pickMode) {
@@ -299,6 +309,8 @@ export class CesiumScene {
     for (const e of this.graticule) e.show = l.graticule;
     if (l.borders && !this.borders && !this.bordersLoading) this.buildBorders();
     if (this.borders) this.borders.show = l.borders;
+    if (this.thaiLines) this.thaiLines.show = l.borders;
+    for (const e of this.thaiFill) e.show = l.borders;
     scene.backgroundColor = sch ? Color.fromCssColorString('#16171b') : Color.BLACK;
     if (this.heatLayer) { this.heatLayer.show = l.coverage; this.heatLayer.alpha = this.style.heatmapOpacity; }
     for (const x of this.effects) x.entity.show = l.eventEffects;
@@ -344,6 +356,16 @@ export class CesiumScene {
       };
       step();
     }).catch((e) => { console.error('borders failed', e); this.bordersLoading = false; });
+    // Thailand: complete outline (land borders + coasts + islands) drawn thicker, plus a faint area fill so the whole country reads as one shape
+    loadThailand().then((t) => {
+      if (this.disposed) return;
+      const pc = new PolylineCollection();
+      const mat = Material.fromType('Color', { color: Color.WHITE });
+      for (const l of t.lines) pc.add({ positions: Cartesian3.fromDegreesArrayHeights(l.flatMap(([lo, la]) => [lo, la, 1800])), width: 3, material: mat });
+      this.viewer.scene.primitives.add(pc);
+      this.thaiLines = pc; pc.show = this.layers?.borders ?? true;
+      this.thaiFill = t.polygons.map((ring) => this.viewer.entities.add({ name: 'Thailand', polygon: { hierarchy: Cartesian3.fromDegreesArray(ring.flat()), material: Color.WHITE.withAlpha(0.1), height: 0, outline: false }, show: this.layers?.borders ?? true }));
+    }).catch((e) => console.error('thailand outline failed', e));
   }
 
   /** Realistic vs colour-coded subsystem (cut-away) view for models that provide it. */
@@ -485,7 +507,7 @@ export class CesiumScene {
 
   setCameraMode(mode: CameraMode, ctx: CameraContext): void {
     const v = this.viewer;
-    this.camMode = mode; this.camCtx = ctx;
+    this.camMode = mode; this.camCtx = ctx; this.homeLocked = mode === 'thailand';
     v.trackedEntity = undefined;
     v.camera.lookAtTransform(Matrix4.IDENTITY);
     // camera distance from the model in units of its bounding radius: follow ≈ 5R (context), closeup ≈ 2.3R (model fills the view)
@@ -513,7 +535,7 @@ export class CesiumScene {
   /** Home: fly back to the start view (straight down over Thailand, north up), releasing any camera tracking. */
   goHome(duration = 1.6): void {
     const v = this.viewer;
-    this.camMode = 'thailand';
+    this.camMode = 'thailand'; this.homeLocked = true;
     v.trackedEntity = undefined;
     v.camera.lookAtTransform(Matrix4.IDENTITY);
     v.camera.flyTo({ destination: Cartesian3.fromDegrees(THAI.lon, THAI.lat, this.homeAltitude()), orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 }, duration });
@@ -901,6 +923,7 @@ export class CesiumScene {
 
   dispose(): void {
     this.disposed = true;
+    this.ro?.disconnect(); clearTimeout(this.roTimer);
     cancelAnimationFrame(this.raf);
     this.handler.destroy();
     this.viewer.destroy();

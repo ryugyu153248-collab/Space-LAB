@@ -22,7 +22,7 @@ function Section({ title, count, children, open = true, action }: { title: strin
 }
 
 const GROUPS: [string, [keyof Layers, string][]][] = [
-  ['Earth', [['borders', 'Country borders'], ['graticule', 'Lat/lon grid (graticule)'], ['hiresImagery', 'Earth surface — Esri World Imagery (online)'], ['terrain', 'Terrain (Cesium World Terrain / AWS Terrarium)'], ['atmosphere', 'Atmosphere & limb glow'], ['clouds', 'Clouds (procedural)'], ['cityLights', 'Night lights (NASA VIIRS, online)'], ['lighting', 'Day/night lighting & terminator']]],
+  ['Earth', [['borders', 'Country borders (Thailand outlined in full)'], ['graticule', 'Lat/lon grid (graticule)'], ['hiresImagery', 'Earth surface — Esri World Imagery (online)'], ['terrain', 'Terrain (Cesium World Terrain / AWS Terrarium)'], ['atmosphere', 'Atmosphere & limb glow'], ['clouds', 'Clouds (procedural)'], ['cityLights', 'Night lights (NASA VIIRS, online)'], ['lighting', 'Day/night lighting & terminator']]],
   ['Space', [['sun', 'Sun'], ['moon', 'Moon'], ['stars', 'Stars'], ['eclipseShadow', 'Earth shadow (umbra cone)']]],
   ['Spacecraft', [['satellites', 'Satellites'], ['models', '3D spacecraft models'], ['labels', 'Labels'], ['debris', 'Debris objects'], ['bodyAxes', 'Body axes / Sun vector (near view)'], ['velocityVector', 'Velocity vector']]],
   ['Orbits & tracks', [['orbits', 'Orbit paths (past / future / pre-maneuver)'], ['groundTracks', 'Ground tracks'], ['nadirLine', 'Sub-satellite point / nadir']]],

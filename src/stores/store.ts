@@ -114,7 +114,7 @@ export const LOOK_PRESETS: Record<EarthLook, Partial<Layers>> = {
   cinematic: { terrain: true, borders: true, graticule: false, stars: true, sun: true, moon: true, cityLights: true, clouds: true, lighting: true, groundTracks: true, nadirLine: true, atmosphere: true },
 };
 
-let savedPanels = { left: false, right: false, bottom: false };
+let savedPanels = { left: true, right: false, bottom: false };
 const STATION_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#06b6d4'];
 const rid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -133,7 +133,7 @@ export const useStore = create<State>((set, get) => ({
   ...firstDerived,
   stations: demo.stations, selectedId: demo.satellites[0].id, secondId: demo.satellites[1]?.id ?? null, selectedStationId: demo.stations[0]?.id ?? null,
   layers: { ...DEFAULT_LAYERS, ...LOOK_PRESETS.standard } as Layers, clock: clock.snapshot(), cameraMode: 'thailand', views: [],
-  panels: { left: false, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
+  panels: { left: true, right: false, bottom: false }, bottomTab: 'timeline', rightTab: 'info', mapMode: '3d', style: { ...DEFAULT_STYLE }, look: 'standard', modelStyle: 'realistic', hidden: {}, sizes: { left: 250, right: 400, bottom: 230, map: 460 }, modelView: false, dialog: null, editingEvent: null,
   settings: { ...DEFAULT_SETTINGS }, heatmap: null, target: null, pickMode: false, conjunctionPair: demo.satellites.length > 1 ? [demo.satellites[0].id, demo.satellites[1].id] : null,
   presentation: false, uiHidden: false, toast: null,
 
