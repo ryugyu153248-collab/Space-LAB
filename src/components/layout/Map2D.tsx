@@ -21,6 +21,18 @@ import type { Satellite, Vec3 } from '@/types';
  */
 interface Track { key: string; tRef: number; period: number; pts: { t: number; lat: number; lon: number }[] }
 
+const THAI_C = { lon: 101.2, lat: 13.2 };
+interface View { cLon: number; cLat: number; zoom: number; init: boolean }
+/** zoom = 1 → the map COVERS the pane (no empty bars; the long side is cropped and can be panned); zoomMin shows the whole world letter-boxed. */
+const scales = (w: number, h: number) => { const cover = Math.max(w / 360, h / 180), fit = Math.min(w / 360, h / 180); return { cover, fit, zoomMin: fit / cover }; };
+const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+/** Keep the visible window inside the world (centre it when the world is smaller than the pane). */
+function clampView(v: View, w: number, h: number): void {
+  const k = scales(w, h).cover * v.zoom, hw = w / (2 * k), hh = h / (2 * k);
+  v.cLon = hw * 2 >= 360 ? 0 : clamp(v.cLon, -180 + hw, 180 - hw);
+  v.cLat = hh * 2 >= 180 ? 0 : clamp(v.cLat, -90 + hh, 90 - hh);
+}
+
 const wrapLon = (l: number) => ((l + 540) % 360) - 180;
 
 function trackFor(cache: Map<string, Track>, sat: Satellite, t: number): Track | null {
@@ -47,7 +59,7 @@ function trackFor(cache: Map<string, Track>, sat: Satellite, t: number): Track |
 export function Map2D() {
   const ref = useRef<HTMLCanvasElement>(null);
   const hover = useRef<HTMLDivElement>(null);
-  const view = useRef({ cLon: 0, cLat: 0, zoom: 1 });
+  const view = useRef<View>({ cLon: THAI_C.lon, cLat: THAI_C.lat, zoom: 1, init: false });
   const cache = useRef(new Map<string, Track>());
   const bg = useRef<HTMLCanvasElement | null>(null);
   const borders = useRef<BorderLine[] | null>(null);
@@ -73,7 +85,8 @@ export function Map2D() {
       if (key === lastKey) return;
       lastKey = key;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const k = Math.min(w / 360, h / 180) * v.zoom;
+      clampView(v, w, h);
+      const k = scales(w, h).cover * v.zoom;
       const X = (lon: number) => w / 2 + (lon - v.cLon) * k, Y = (lat: number) => h / 2 - (lat - v.cLat) * k;
       ctx.fillStyle = '#050a14'; ctx.fillRect(0, 0, w, h);
       if (bg.current) ctx.drawImage(bg.current, X(-180), Y(90), 360 * k, 180 * k);
@@ -181,14 +194,22 @@ export function Map2D() {
 
   const toLonLat = (e: React.MouseEvent): [number, number] => {
     const cv = ref.current!, r = cv.getBoundingClientRect(), v = view.current;
-    const k = Math.min(r.width / 360, r.height / 180) * v.zoom;
+    const k = scales(r.width, r.height).cover * v.zoom;
     return [v.cLon + (e.clientX - r.left - r.width / 2) / k, v.cLat - (e.clientY - r.top - r.height / 2) / k];
   };
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  /** View shortcuts: 'fill' = cover the pane centred on Thailand, 'thai' = zoom to Thailand, 'world' = whole world. */
+  const goto = (mode: 'fill' | 'thai' | 'world') => {
+    const cv = ref.current!, w = cv.clientWidth, h = cv.clientHeight, { cover, zoomMin } = scales(w, h), v = view.current;
+    v.init = true;
+    if (mode === 'world') { v.zoom = zoomMin; v.cLon = 0; v.cLat = 0; }
+    else if (mode === 'thai') { v.zoom = Math.max(zoomMin, h / 24 / cover); v.cLon = THAI_C.lon; v.cLat = THAI_C.lat; }
+    else { v.zoom = 1; v.cLon = THAI_C.lon; v.cLat = THAI_C.lat; }
+  };
   return (
     <div className="relative w-full h-full bg-black">
       <canvas ref={ref} className="w-full h-full block cursor-crosshair"
-        onWheel={(e) => { const v = view.current; const [lo, la] = toLonLat(e); const z = Math.min(16, Math.max(1, v.zoom * (e.deltaY < 0 ? 1.25 : 0.8))); const f = z / v.zoom; v.cLon = lo - (lo - v.cLon) / f; v.cLat = la - (la - v.cLat) / f; v.zoom = z; if (z === 1) { v.cLon = 0; v.cLat = 0; } }}
+        onWheel={(e) => { const v = view.current; const [lo, la] = toLonLat(e); const r = ref.current!.getBoundingClientRect(); const z = clamp(v.zoom * (e.deltaY < 0 ? 1.25 : 0.8), scales(r.width, r.height).zoomMin, 20); const f = z / v.zoom; v.cLon = lo - (lo - v.cLon) / f; v.cLat = la - (la - v.cLat) / f; v.zoom = z; }}
         onPointerDown={(e) => { drag.current = { x: e.clientX, y: e.clientY, moved: false }; (e.target as HTMLElement).setPointerCapture(e.pointerId); }}
         onPointerMove={(e) => {
           const [lo, la] = toLonLat(e);
@@ -196,11 +217,16 @@ export function Map2D() {
           const d = drag.current; if (!d) return;
           const dx = e.clientX - d.x, dy = e.clientY - d.y;
           if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
-          if (d.moved) { const r = ref.current!.getBoundingClientRect(), v = view.current, k = Math.min(r.width / 360, r.height / 180) * v.zoom; v.cLon -= dx / k; v.cLat += dy / k; d.x = e.clientX; d.y = e.clientY; }
+          if (d.moved) { const r = ref.current!.getBoundingClientRect(), v = view.current, k = scales(r.width, r.height).cover * v.zoom; v.cLon -= dx / k; v.cLat += dy / k; d.x = e.clientX; d.y = e.clientY; }
         }}
         onPointerUp={(e) => { const d = drag.current; drag.current = null; if (d && !d.moved) { const [lo, la] = toLonLat(e); if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) { const s = useStore.getState(); s.setTarget({ lat: la, lon: lo, radiusKm: s.target?.radiusKm }); s.notify(`Target set: ${la.toFixed(2)}°, ${lo.toFixed(2)}°`); } } }}
-        onDoubleClick={() => { view.current = { cLon: 0, cLat: 0, zoom: 1 }; }} />
-      <div className="absolute left-2 top-2 text-[10px] text-slate-300 bg-black/50 rounded px-2 py-0.5 pointer-events-none">2D Map · wheel zoom · drag pan · click = target · dbl-click reset</div>
+        onDoubleClick={() => goto('fill')} />
+      <div className="absolute left-2 top-2 flex items-center gap-1 z-10">
+        <span className="text-[10px] text-slate-300 bg-black/50 rounded px-2 py-1 pointer-events-none">แผนที่ 2D · ล้อเมาส์ซูม · ลากเลื่อน · คลิก = ตั้งเป้าหมาย</span>
+        <button className="btn !py-0.5" onClick={() => goto('thai')}>ไทย</button>
+        <button className="btn !py-0.5" onClick={() => goto('fill')}>เต็มช่อง</button>
+        <button className="btn !py-0.5" onClick={() => goto('world')}>ทั้งโลก</button>
+      </div>
       <div ref={hover} className="absolute left-2 bottom-2 num text-[10px] text-slate-200 bg-black/50 rounded px-2 py-0.5 pointer-events-none">—</div>
     </div>
   );
